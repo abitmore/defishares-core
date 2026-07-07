@@ -16,7 +16,15 @@ namespace defishares {
 
 const char* gold_symbol();
 
+uint16_t fixed_initial_collateral_ratio();
+
 bool is_gold_asset( const asset_object& asset_obj );
+
+bool manages_margin_positions( const asset_bitasset_data_object& bitasset );
+
+bool settlements_disabled( const asset_bitasset_data_object& bitasset );
+
+bool margin_calls_disabled( const asset_bitasset_data_object& bitasset );
 
 const asset_object* find_gold_asset( const database& db );
 

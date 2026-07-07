@@ -1122,6 +1122,8 @@ void_result asset_global_settle_evaluator::do_evaluate(const asset_global_settle
               "Can not globally settle an asset with zero supply" );
 
    const asset_bitasset_data_object& _bitasset_data  = asset_to_settle->bitasset_data(d);
+   FC_ASSERT( !defishares::settlements_disabled( _bitasset_data ),
+              "Global settlement is disabled for DefiShares smartcoins" );
    // if there is a settlement for this asset, then no further global settle may be taken
    FC_ASSERT( !_bitasset_data.is_globally_settled(),
               "This asset has been globally settled, cannot globally settle again" );
@@ -1154,6 +1156,8 @@ void_result asset_settle_evaluator::do_evaluate(const asset_settle_evaluator::op
               "Can only force settle a predition market or a market issued asset" );
 
    const auto& bitasset = asset_to_settle->bitasset_data(d);
+   FC_ASSERT( !defishares::settlements_disabled( bitasset ),
+              "Settlement is disabled for DefiShares smartcoins" );
    FC_ASSERT( asset_to_settle->can_force_settle() || bitasset.is_globally_settled()
                  || bitasset.is_individually_settled_to_fund(),
               "Either the asset need to have the force_settle flag enabled, or it need to be globally settled, "

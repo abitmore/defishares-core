@@ -65,6 +65,26 @@ uint32_t blocks_until_gold_feed_update( const database& db, const asset_object& 
                          : defishares_gold_feed_update_blocks - remainder;
 }
 
+void update_call_order( database_fixture& fixture, const account_object& account,
+                        const asset& delta_debt, const asset& delta_collateral )
+{
+   set_expiration( fixture.db, fixture.trx );
+   fixture.trx.operations.clear();
+
+   call_order_update_operation update;
+   update.funding_account = account.get_id();
+   update.delta_debt = delta_debt;
+   update.delta_collateral = delta_collateral;
+
+   fixture.trx.operations.push_back( update );
+   for( auto& op : fixture.trx.operations )
+      fixture.db.current_fee_schedule().set_fee( op );
+   fixture.trx.validate();
+   PUSH_TX( fixture.db, fixture.trx, ~0 );
+   fixture.trx.clear();
+   database_fixture::verify_asset_supplies( fixture.db );
+}
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE( defishares_gold_feed_is_automatic )
@@ -195,6 +215,111 @@ BOOST_AUTO_TEST_CASE( defishares_rejects_direct_core_feed_once_gold_exists )
    direct_core_feed.maximum_short_squeeze_ratio = 1100;
 
    GRAPHENE_REQUIRE_THROW( publish_feed( bitusd, feedproducer, direct_core_feed ), fc::exception );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_fixed_icr_allows_exact_two_times_collateralization )
+{ try {
+   ACTORS( (feedproducer)(borrower) );
+
+   const auto& gold = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                       GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   const auto& bitusd = create_bitasset( "USDBIT", feedproducer_id, 100, charge_market_fee,
+                                         GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( bitusd, { feedproducer_id } );
+
+   price_feed feed;
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 1 );
+   feed.maintenance_collateral_ratio = 1750;
+   feed.maximum_short_squeeze_ratio = 1100;
+   publish_feed( bitusd, feedproducer, feed );
+
+   BOOST_CHECK_EQUAL( bitusd.bitasset_data( db ).current_feed.initial_collateral_ratio, 2000 );
+
+   transfer( committee_account, borrower_id, asset( 200 ) );
+   const call_order_object* call_ptr = borrow( borrower, bitusd.amount( 100 ), asset( 200 ) );
+   BOOST_REQUIRE( call_ptr != nullptr );
+   BOOST_CHECK( call_ptr->collateralization() >= bitusd.bitasset_data( db ).current_initial_collateralization );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_disables_settlement_and_margin_calls )
+{ try {
+   ACTORS( (feedproducer)(borrower) );
+
+   const auto& gold = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                       GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   const auto& bitusd = create_bitasset( "USDBIT", feedproducer_id, 100, charge_market_fee,
+                                         GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( bitusd, { feedproducer_id } );
+
+   price_feed feed;
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 1 );
+   feed.maintenance_collateral_ratio = 1750;
+   feed.maximum_short_squeeze_ratio = 1100;
+   publish_feed( bitusd, feedproducer, feed );
+
+   transfer( committee_account, borrower_id, asset( 210 ) );
+   const call_order_object* initial_call = borrow( borrower, bitusd.amount( 100 ), asset( 210 ) );
+   BOOST_REQUIRE( initial_call != nullptr );
+   const call_order_id_type call_id( initial_call->id );
+
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 2 );
+   publish_feed( bitusd, feedproducer, feed );
+
+   const auto* repriced_call = db.find( call_id );
+   BOOST_REQUIRE( repriced_call != nullptr );
+   BOOST_CHECK_EQUAL( repriced_call->debt.value, 100 );
+   BOOST_CHECK_EQUAL( repriced_call->collateral.value, 210 );
+   BOOST_CHECK( repriced_call->collateralization() < bitusd.bitasset_data( db ).current_initial_collateralization );
+
+   GRAPHENE_REQUIRE_THROW( force_settle( borrower, bitusd.amount( 10 ) ), fc::exception );
+   GRAPHENE_REQUIRE_THROW( force_global_settle( bitusd, bitusd.amount( 1 ) / asset( 1 ) ), fc::exception );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_low_cr_position_can_only_repair )
+{ try {
+   ACTORS( (feedproducer)(borrower) );
+
+   const auto& gold = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                       GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   const auto& bitusd = create_bitasset( "USDBIT", feedproducer_id, 100, charge_market_fee,
+                                         GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( bitusd, { feedproducer_id } );
+
+   price_feed feed;
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 1 );
+   feed.maintenance_collateral_ratio = 1750;
+   feed.maximum_short_squeeze_ratio = 1100;
+   publish_feed( bitusd, feedproducer, feed );
+
+   transfer( committee_account, borrower_id, asset( 220 ) );
+   const call_order_object* initial_call = borrow( borrower, bitusd.amount( 100 ), asset( 210 ) );
+   BOOST_REQUIRE( initial_call != nullptr );
+   const call_order_id_type call_id( initial_call->id );
+
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 2 );
+   publish_feed( bitusd, feedproducer, feed );
+
+   const auto& bitusd_bad = bitusd.bitasset_data( db );
+   const auto* repriced_call = db.find( call_id );
+   BOOST_REQUIRE( repriced_call != nullptr );
+   BOOST_REQUIRE( repriced_call->collateralization() < bitusd_bad.current_initial_collateralization );
+
+   update_call_order( *this, borrower, -bitusd.amount( 10 ), asset( 0 ) );
+   const auto* repaired_call = db.find( call_id );
+   BOOST_REQUIRE( repaired_call != nullptr );
+   BOOST_CHECK_EQUAL( repaired_call->debt.value, 90 );
+   BOOST_CHECK_EQUAL( repaired_call->collateral.value, 210 );
+   BOOST_CHECK( repaired_call->collateralization() < bitusd_bad.current_initial_collateralization );
+
+   update_call_order( *this, borrower, bitusd.amount( 0 ), asset( 10 ) );
+   const auto* collateral_added_call = db.find( call_id );
+   BOOST_REQUIRE( collateral_added_call != nullptr );
+   BOOST_CHECK_EQUAL( collateral_added_call->debt.value, 90 );
+   BOOST_CHECK_EQUAL( collateral_added_call->collateral.value, 220 );
+
+   GRAPHENE_REQUIRE_THROW( borrow( borrower, bitusd.amount( 1 ), asset( 0 ) ), fc::exception );
+   GRAPHENE_REQUIRE_THROW( update_call_order( *this, borrower, bitusd.amount( 0 ), asset( -1 ) ), fc::exception );
+   GRAPHENE_REQUIRE_THROW( update_call_order( *this, borrower, -bitusd.amount( 1 ), asset( -1 ) ), fc::exception );
 } FC_LOG_AND_RETHROW() }
 
 /*****

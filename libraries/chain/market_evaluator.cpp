@@ -23,6 +23,7 @@
  */
 #include <graphene/chain/account_object.hpp>
 #include <graphene/chain/asset_object.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/market_object.hpp>
 
 #include <graphene/chain/market_evaluator.hpp>
@@ -573,6 +574,13 @@ void_result call_order_update_evaluator::do_evaluate(const call_order_update_ope
             && !( HARDFORK_CORE_2467_PASSED( next_maintenance_time ) && _closing_order ) )
       FC_THROW_EXCEPTION(insufficient_feeds, "Cannot borrow asset with no price feed.");
 
+   if( call_ptr && !_closing_order && defishares::manages_margin_positions( *_bitasset_data )
+       && call_ptr->collateralization() < _bitasset_data->current_initial_collateralization )
+   {
+      FC_ASSERT( o.delta_debt.amount <= 0 && o.delta_collateral.amount >= 0,
+                 "Debt positions below the fixed ICR may only reduce debt and/or add collateral" );
+   }
+
    // Since hard fork core-973, check asset authorization limitations
    if( HARDFORK_CORE_973_PASSED(d.head_block_time()) )
    {
@@ -681,15 +689,20 @@ object_id_type call_order_update_evaluator::do_apply(const call_order_update_ope
       return call_order_id;
 
    // then we must check for margin calls and other issues
+   const bool defishares_managed = defishares::manages_margin_positions( *_bitasset_data );
 
    // After hf core-2481, we do not allow new position's CR to be <= ~max_short_squeeze_price, because
    // * if there is no force settlement order, it would trigger a blackswan event instantly,
    // * if there is a force settlement order, they will match at the call order's CR, but it is not fair for the
    //   force settlement order.
    auto call_collateralization = call_ptr->collateralization();
+   const bool meets_initial_collateralization =
+      defishares_managed
+      ? ( call_collateralization >= _bitasset_data->current_initial_collateralization )
+      : ( call_collateralization > _bitasset_data->current_initial_collateralization );
    bool increasing_cr = ( old_collateralization.valid() && call_ptr->debt <= *old_debt
                                                         && call_collateralization > *old_collateralization );
-   if( HARDFORK_CORE_2481_PASSED( next_maint_time ) )
+   if( HARDFORK_CORE_2481_PASSED( next_maint_time ) && !defishares::margin_calls_disabled( *_bitasset_data ) )
    {
       // Note: if it is to increase CR and is not increasing debt amount, it is allowed,
       //       because it implies BSRM == no_settlement
@@ -735,7 +748,9 @@ object_id_type call_order_update_evaluator::do_apply(const call_order_update_ope
          //       - when a position has ICR > CR > MCR, allow the owner to sell some collateral to increase CR
          //       - allow owners to sell collateral at price < MSSP (need to update code elsewhere)
          FC_ASSERT( !call_ptr || increasing_cr
-                    || call_ptr->collateralization() > _bitasset_data->current_initial_collateralization,
+                    || ( defishares_managed
+                         ? ( call_ptr->collateralization() >= _bitasset_data->current_initial_collateralization )
+                         : ( call_ptr->collateralization() > _bitasset_data->current_initial_collateralization ) ),
                     "Could not create a debt position which would trigger a margin call instantly, "
                     "unless the debt position is fully filled, or it is to increase collateral ratio of "
                     "an existing debt position and is not increasing its debt amount, "
@@ -748,7 +763,7 @@ object_id_type call_order_update_evaluator::do_apply(const call_order_update_ope
       // we know no black swan event has occurred
       FC_ASSERT( call_ptr, "no margin call was executed and yet the call object was deleted" );
       // this HF must remain as-is, as the assert inside the "if" was triggered during push_proposal()
-      if( d.head_block_time() <= HARDFORK_CORE_583_TIME )
+      if( d.head_block_time() <= HARDFORK_CORE_583_TIME && !defishares_managed )
       {
          // We didn't fill any call orders.  This may be because we
          // aren't in margin call territory, or it may be because there
@@ -780,7 +795,7 @@ object_id_type call_order_update_evaluator::do_apply(const call_order_update_ope
          if( !ok )
             ok = before_core_hardfork_1270 ?
                          ( ~call_ptr->call_price < _bitasset_data->current_feed.settlement_price )
-                       : ( call_collateralization > _bitasset_data->current_initial_collateralization );
+                       : meets_initial_collateralization;
          FC_ASSERT( ok,
             "Can only increase collateral ratio without increasing debt when the debt position's "
             "collateral ratio is lower than or equal to required initial collateral ratio (ICR), "

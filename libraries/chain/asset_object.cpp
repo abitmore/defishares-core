@@ -23,6 +23,7 @@
  */
 #include <graphene/chain/asset_object.hpp>
 #include <graphene/chain/database.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/hardfork.hpp>
 
 #include <fc/io/raw.hpp>
@@ -90,7 +91,9 @@ void asset_bitasset_data_object::update_median_feeds( time_point_sec current_tim
             median_feed.maintenance_collateral_ratio = *exts.maintenance_collateral_ratio;
          if( exts.maximum_short_squeeze_ratio.valid() )
             median_feed.maximum_short_squeeze_ratio = *exts.maximum_short_squeeze_ratio;
-         if( exts.initial_collateral_ratio.valid() )
+         if( defishares::manages_margin_positions( *this ) )
+            median_feed.initial_collateral_ratio = defishares::fixed_initial_collateral_ratio();
+         else if( exts.initial_collateral_ratio.valid() )
             median_feed.initial_collateral_ratio = *exts.initial_collateral_ratio;
          // update data derived from MCR, ICR and etc
          refresh_cache();
@@ -124,6 +127,8 @@ void asset_bitasset_data_object::update_median_feeds( time_point_sec current_tim
 
    if( median_feed.core_exchange_rate != tmp_median_feed.core_exchange_rate )
       feed_cer_updated = true;
+   if( defishares::manages_margin_positions( *this ) )
+      tmp_median_feed.initial_collateral_ratio = defishares::fixed_initial_collateral_ratio();
    median_feed = tmp_median_feed;
    // Note: perhaps can defer updating current_maintenance_collateralization for better performance
    if( after_core_hardfork_1270 )
@@ -135,9 +140,15 @@ void asset_bitasset_data_object::update_median_feeds( time_point_sec current_tim
 
 void asset_bitasset_data_object::refresh_cache()
 {
-   current_maintenance_collateralization = median_feed.maintenance_collateralization();
-   if( median_feed.initial_collateral_ratio > median_feed.maintenance_collateral_ratio ) // if ICR is above MCR
-      current_initial_collateralization = median_feed.get_initial_collateralization();
+   current_maintenance_collateralization = current_feed.maintenance_collateralization();
+   if( defishares::manages_margin_positions( *this ) )
+   {
+      auto fixed_feed = current_feed;
+      fixed_feed.initial_collateral_ratio = defishares::fixed_initial_collateral_ratio();
+      current_initial_collateralization = fixed_feed.get_initial_collateralization();
+   }
+   else if( current_feed.initial_collateral_ratio > current_feed.maintenance_collateral_ratio ) // if ICR is above MCR
+      current_initial_collateralization = current_feed.get_initial_collateralization();
    else // if ICR is not above MCR
       current_initial_collateralization = current_maintenance_collateralization;
 }

@@ -309,7 +309,10 @@ void database::update_bitasset_current_feed( const asset_bitasset_data_object& b
             new_current_feed_price = get_derived_current_feed_price( *this, abdo );
       }
       if( new_current_feed_price.valid() )
+      {
          abdo.current_feed.settlement_price = *new_current_feed_price;
+         abdo.refresh_cache();
+      }
    } );
 
    // Update individual settlement order price

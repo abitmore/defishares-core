@@ -26,6 +26,7 @@
 
 #include <graphene/chain/account_object.hpp>
 #include <graphene/chain/asset_object.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/hardfork.hpp>
 #include <graphene/chain/market_object.hpp>
 #include <graphene/chain/is_authorized_asset.hpp>
@@ -2088,6 +2089,8 @@ bool database::check_call_orders( const asset_object& mia, bool enable_black_swa
     if( !mia.is_market_issued() ) return false;
 
     const asset_bitasset_data_object& bitasset = ( bitasset_ptr ? *bitasset_ptr : mia.bitasset_data(*this) );
+    if( defishares::margin_calls_disabled( bitasset ) )
+       return false;
 
     // price feeds can cause black swans in prediction markets
     // The hardfork check may be able to be removed after the hardfork date

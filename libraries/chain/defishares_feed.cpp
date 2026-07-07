@@ -27,6 +27,7 @@ constexpr uint64_t DEFISHARES_INITIAL_GOLD_PER_BTS_DENOMINATOR = 1;
 constexpr uint32_t DEFISHARES_GOLD_FEED_UPDATE_BLOCKS = 9600;
 constexpr uint32_t DEFISHARES_BLOCKS_PER_YEAR = 28800 * 365;
 constexpr uint64_t DEFISHARES_FEED_FACTOR_SCALE = 1000000000ULL;
+constexpr uint16_t DEFISHARES_FIXED_INITIAL_COLLATERAL_RATIO = 2000;
 
 price make_price_from_rational( fc::uint128_t numerator,
                                 fc::uint128_t denominator,
@@ -56,7 +57,9 @@ void apply_option_overrides( asset_bitasset_data_object& bitasset )
       bitasset.median_feed.maintenance_collateral_ratio = *exts.maintenance_collateral_ratio;
    if( exts.maximum_short_squeeze_ratio.valid() )
       bitasset.median_feed.maximum_short_squeeze_ratio = *exts.maximum_short_squeeze_ratio;
-   if( exts.initial_collateral_ratio.valid() )
+   if( manages_margin_positions( bitasset ) )
+      bitasset.median_feed.initial_collateral_ratio = DEFISHARES_FIXED_INITIAL_COLLATERAL_RATIO;
+   else if( exts.initial_collateral_ratio.valid() )
       bitasset.median_feed.initial_collateral_ratio = *exts.initial_collateral_ratio;
 }
 
@@ -110,9 +113,29 @@ const char* gold_symbol()
    return DEFISHARES_GOLD_SYMBOL;
 }
 
+uint16_t fixed_initial_collateral_ratio()
+{
+   return DEFISHARES_FIXED_INITIAL_COLLATERAL_RATIO;
+}
+
 bool is_gold_asset( const asset_object& asset_obj )
 {
    return asset_obj.is_market_issued() && asset_obj.symbol == DEFISHARES_GOLD_SYMBOL;
+}
+
+bool manages_margin_positions( const asset_bitasset_data_object& bitasset )
+{
+   return !bitasset.is_prediction_market;
+}
+
+bool settlements_disabled( const asset_bitasset_data_object& bitasset )
+{
+   return manages_margin_positions( bitasset );
+}
+
+bool margin_calls_disabled( const asset_bitasset_data_object& bitasset )
+{
+   return manages_margin_positions( bitasset );
 }
 
 const asset_object* find_gold_asset( const database& db )
@@ -178,11 +201,13 @@ void apply_feed_policy( const database& db, asset_bitasset_data_object& bitasset
    if( !gold_asset || bitasset.median_feed.settlement_price.is_null() )
    {
       bitasset.current_feed = bitasset.median_feed;
+      if( manages_margin_positions( bitasset ) )
+         bitasset.current_feed.initial_collateral_ratio = DEFISHARES_FIXED_INITIAL_COLLATERAL_RATIO;
       bitasset.refresh_cache();
       return;
    }
 
-   price_feed current_feed = bitasset.median_feed;
+   price_feed_with_icr current_feed = bitasset.median_feed;
 
    if( bitasset.median_feed.settlement_price.base.asset_id == bitasset.asset_id
        && bitasset.median_feed.settlement_price.quote.asset_id == gold_asset->get_id()
@@ -193,6 +218,9 @@ void apply_feed_policy( const database& db, asset_bitasset_data_object& bitasset
       current_feed.settlement_price = target_per_core;
       current_feed.core_exchange_rate = target_per_core;
    }
+
+   if( manages_margin_positions( bitasset ) )
+      current_feed.initial_collateral_ratio = DEFISHARES_FIXED_INITIAL_COLLATERAL_RATIO;
 
    bitasset.current_feed = current_feed;
    bitasset.refresh_cache();
