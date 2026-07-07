@@ -26,6 +26,7 @@
 #include <graphene/chain/account_object.hpp>
 #include <graphene/chain/market_object.hpp>
 #include <graphene/chain/database.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/exceptions.hpp>
 #include <graphene/chain/hardfork.hpp>
 #include <graphene/chain/is_authorized_asset.hpp>
@@ -326,6 +327,9 @@ object_id_type asset_create_evaluator::do_apply( const asset_create_operation& o
          a.creation_time      = d._current_block_time;
       });
    FC_ASSERT( new_asset.id == next_asset_id, "Unexpected object database error, object id mismatch" );
+
+   if( new_asset.is_market_issued() && defishares::is_gold_asset( new_asset ) )
+      d.update_bitasset_current_feed( new_asset.bitasset_data( d ) );
 
    return new_asset.id;
 } FC_CAPTURE_AND_RETHROW( (op) ) } // GCOVR_EXCL_LINE
@@ -1429,9 +1433,14 @@ void_result asset_publish_feeds_evaluator::do_evaluate(const asset_publish_feed_
       FC_ASSERT( !bitasset.is_globally_settled(), "No further feeds may be published after a settlement event" );
    }
 
-   // the settlement price must be quoted in terms of the backing asset
-   FC_ASSERT( o.feed.settlement_price.quote.asset_id == bitasset.options.short_backing_asset,
-              "Quote asset type in settlement price should be same as backing asset of this asset" );
+   // The settlement price is normally quoted in terms of the backing asset. Once GOLD exists, DefiShares requires
+   // TARGET/GOLD feeds for non-GOLD BTS-backed bitassets; they are converted into TARGET/BTS during feed updates.
+   const bool direct_backing_feed = o.feed.settlement_price.quote.asset_id == bitasset.options.short_backing_asset;
+   const bool defishares_gold_feed = defishares::accepts_gold_quote_feed( d, base, bitasset, o.feed );
+   const bool gold_asset_exists = defishares::find_gold_asset( d ) != nullptr;
+   FC_ASSERT( defishares_gold_feed
+              || ( direct_backing_feed && ( !gold_asset_exists || defishares::is_gold_asset( base ) ) ),
+              "Quote asset type in settlement price should be same as backing asset or GOLD for this asset" );
 
    if( now > HARDFORK_480_TIME )
    {

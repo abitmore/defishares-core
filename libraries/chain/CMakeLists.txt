@@ -57,6 +57,7 @@ add_library( graphene_chain
              confidential_evaluator.cpp
              special_authority_evaluation.cpp
              custom_authority_evaluator.cpp
+             defishares_feed.cpp
              buyback.cpp
 
              account_object.cpp

@@ -413,7 +413,7 @@ namespace graphene { namespace chain {
           * @note Called by @ref database::update_bitasset_current_feed() which updates @ref current_feed afterwards.
           */
          void update_median_feeds(time_point_sec current_time, time_point_sec next_maintenance_time);
-      private:
+
          /// Derive @ref current_maintenance_collateralization and @ref current_initial_collateralization from
          /// other member variables.
          void refresh_cache();

@@ -179,7 +179,6 @@ void asset_publish_feed_operation::validate()const
    }
 
    FC_ASSERT( !feed.settlement_price.is_null() );
-   FC_ASSERT( !feed.core_exchange_rate.is_null() );
    FC_ASSERT( feed.is_for( asset_id ) );
 
    if( extensions.value.initial_collateral_ratio.valid() )

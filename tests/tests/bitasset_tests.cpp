@@ -50,6 +50,153 @@ using namespace graphene::chain::test;
 
 BOOST_FIXTURE_TEST_SUITE( bitasset_tests, database_fixture )
 
+namespace {
+
+constexpr uint32_t defishares_gold_feed_update_blocks = 9600;
+
+uint32_t blocks_until_gold_feed_update( const database& db, const asset_object& gold )
+{
+   if( db.head_block_num() < gold.creation_block_num )
+      return ( gold.creation_block_num - db.head_block_num() ) + defishares_gold_feed_update_blocks;
+
+   const uint32_t elapsed_blocks = db.head_block_num() - gold.creation_block_num;
+   const uint32_t remainder = elapsed_blocks % defishares_gold_feed_update_blocks;
+   return remainder == 0 ? defishares_gold_feed_update_blocks
+                         : defishares_gold_feed_update_blocks - remainder;
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE( defishares_gold_feed_is_automatic )
+{ try {
+   const asset_id_type gold_id = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                                  GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS ).get_id();
+   generate_block();
+   const auto& gold_bad = gold_id( db ).bitasset_data( db );
+   const double initial_gold_price = gold_bad.current_feed.settlement_price.to_real();
+
+   BOOST_REQUIRE( !gold_bad.current_feed.settlement_price.is_null() );
+   BOOST_CHECK( gold_bad.current_feed.settlement_price == gold_id( db ).amount( 1 ) / asset( 1 ) );
+   BOOST_CHECK( gold_bad.current_feed.core_exchange_rate == gold_bad.current_feed.settlement_price );
+
+   const uint32_t blocks_to_update = blocks_until_gold_feed_update( db, gold_id( db ) );
+   BOOST_REQUIRE_GT( blocks_to_update, 0u );
+
+   generate_blocks( blocks_to_update - 1 );
+   BOOST_CHECK( gold_id( db ).bitasset_data( db ).current_feed.settlement_price == gold_id( db ).amount( 1 ) / asset( 1 ) );
+
+   generate_block();
+   const auto& updated_gold = gold_id( db );
+   const auto& updated_gold_bad = updated_gold.bitasset_data( db );
+   BOOST_REQUIRE( !updated_gold_bad.current_feed.settlement_price.is_null() );
+   BOOST_CHECK_GT( updated_gold_bad.current_feed.settlement_price.to_real(), initial_gold_price );
+   BOOST_CHECK( updated_gold_bad.current_feed.core_exchange_rate == updated_gold_bad.current_feed.settlement_price );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_target_gold_feed_is_derived_to_core )
+{ try {
+   ACTORS( (feedproducer) );
+
+   const asset_id_type gold_id = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                                  GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS ).get_id();
+   const asset_id_type bitusd_id = create_bitasset( "USDBIT", feedproducer_id, 100, charge_market_fee,
+                                                    GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS ).get_id();
+   update_feed_producers( bitusd_id( db ), { feedproducer_id } );
+
+   price_feed current_feed;
+   current_feed.settlement_price = bitusd_id( db ).amount( 1 ) / gold_id( db ).amount( 2 );
+   current_feed.maintenance_collateral_ratio = 1750;
+   current_feed.maximum_short_squeeze_ratio = 1100;
+   publish_feed( bitusd_id( db ), feedproducer, current_feed );
+   generate_block();
+
+   const auto& bitusd_bad = bitusd_id( db ).bitasset_data( db );
+   const double initial_bitusd_price = bitusd_bad.current_feed.settlement_price.to_real();
+   BOOST_REQUIRE( !bitusd_bad.current_feed.settlement_price.is_null() );
+   BOOST_CHECK( bitusd_bad.current_feed.settlement_price == bitusd_id( db ).amount( 1 ) / asset( 2 ) );
+   BOOST_CHECK( bitusd_bad.current_feed.core_exchange_rate == bitusd_bad.current_feed.settlement_price );
+
+   const uint32_t blocks_to_update = blocks_until_gold_feed_update( db, gold_id( db ) );
+   BOOST_REQUIRE_GT( blocks_to_update, 0u );
+
+   generate_blocks( blocks_to_update - 1 );
+   BOOST_CHECK( bitusd_id( db ).bitasset_data( db ).current_feed.settlement_price == bitusd_id( db ).amount( 1 ) / asset( 2 ) );
+
+   generate_block();
+   const auto& updated_bitusd_bad = bitusd_id( db ).bitasset_data( db );
+   BOOST_REQUIRE( !updated_bitusd_bad.current_feed.settlement_price.is_null() );
+   BOOST_CHECK_GT( updated_bitusd_bad.current_feed.settlement_price.to_real(), initial_bitusd_price );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_gold_manual_feed_does_not_override_automatic )
+{ try {
+   ACTORS( (feedproducer) );
+
+   const auto& gold = create_bitasset( "GOLD", feedproducer_id, 100, charge_market_fee,
+                                       GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( gold, { feedproducer_id } );
+
+   const price automatic_price = gold.bitasset_data( db ).current_feed.settlement_price;
+
+   price_feed manual_feed;
+   manual_feed.settlement_price = gold.amount( 5 ) / asset( 1 );
+   manual_feed.maintenance_collateral_ratio = 1750;
+   manual_feed.maximum_short_squeeze_ratio = 1100;
+   publish_feed( gold, feedproducer, manual_feed );
+
+   const auto& gold_bad = gold.bitasset_data( db );
+   BOOST_REQUIRE( !gold_bad.current_feed.settlement_price.is_null() );
+   BOOST_CHECK( gold_bad.current_feed.settlement_price == automatic_price );
+   BOOST_CHECK( gold_bad.current_feed.core_exchange_rate == automatic_price );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_target_gold_feed_uses_median_before_derivation )
+{ try {
+   ACTORS( (alice)(bob)(charlie) );
+
+   const auto& gold = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                       GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   const auto& bitusd = create_bitasset( "USDBIT", alice_id, 100, charge_market_fee,
+                                         GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( bitusd, { alice_id, bob_id, charlie_id } );
+
+   price_feed feed;
+   feed.maintenance_collateral_ratio = 1750;
+   feed.maximum_short_squeeze_ratio = 1100;
+
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 1 );
+   publish_feed( bitusd, alice, feed );
+
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 4 );
+   publish_feed( bitusd, bob, feed );
+
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 2 );
+   publish_feed( bitusd, charlie, feed );
+
+   const auto& bitusd_bad = bitusd.bitasset_data( db );
+   BOOST_REQUIRE( !bitusd_bad.current_feed.settlement_price.is_null() );
+   BOOST_CHECK( bitusd_bad.current_feed.settlement_price == bitusd.amount( 1 ) / asset( 2 ) );
+   BOOST_CHECK( bitusd_bad.current_feed.core_exchange_rate == bitusd_bad.current_feed.settlement_price );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_rejects_direct_core_feed_once_gold_exists )
+{ try {
+   ACTORS( (feedproducer) );
+
+   create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                    GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   const auto& bitusd = create_bitasset( "USDBIT", feedproducer_id, 100, charge_market_fee,
+                                         GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( bitusd, { feedproducer_id } );
+
+   price_feed direct_core_feed;
+   direct_core_feed.settlement_price = bitusd.amount( 1 ) / asset( 2 );
+   direct_core_feed.maintenance_collateral_ratio = 1750;
+   direct_core_feed.maximum_short_squeeze_ratio = 1100;
+
+   GRAPHENE_REQUIRE_THROW( publish_feed( bitusd, feedproducer, direct_core_feed ), fc::exception );
+} FC_LOG_AND_RETHROW() }
+
 /*****
  * @brief helper method to change a backing asset to a new one
  * @param fixture the database_fixture

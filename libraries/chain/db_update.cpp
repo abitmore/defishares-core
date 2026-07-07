@@ -27,6 +27,7 @@
 
 #include <graphene/chain/asset_object.hpp>
 #include <graphene/chain/credit_offer_object.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/global_property_object.hpp>
 #include <graphene/chain/hardfork.hpp>
 #include <graphene/chain/htlc_object.hpp>
@@ -80,6 +81,8 @@ void database::update_global_dynamic_data( const signed_block& b, const uint32_t
 
    _undo_db.set_max_size( _dgp.head_block_number - _dgp.last_irreversible_block_num + 1 );
    _fork_db.set_max_size( _dgp.head_block_number - _dgp.last_irreversible_block_num + 1 );
+
+   defishares::refresh_scheduled_feeds( *this );
 }
 
 void database::update_signing_witness(const witness_object& signing_witness, const signed_block& new_block)
@@ -301,6 +304,7 @@ void database::update_bitasset_current_feed( const asset_bitasset_data_object& b
          const auto& maint_time = get_dynamic_global_properties().next_maintenance_time;
          abdo.update_median_feeds( head_time, maint_time );
          abdo.current_feed = abdo.median_feed;
+         defishares::apply_feed_policy( *this, abdo );
          if( bsrm_type::no_settlement == bsrm || bsrm_type::individual_settlement_to_fund == bsrm )
             new_current_feed_price = get_derived_current_feed_price( *this, abdo );
       }
