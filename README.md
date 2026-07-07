@@ -10,6 +10,9 @@ Information for developers can be found in the [Wiki](https://github.com/bitshar
 
 Visit [Awesome BitShares](https://github.com/bitshares/awesome-bitshares) to find more resources and links E.G. chat groups, client libraries and extended APIs.
 
+For DefiShares-specific smartcoin feed changes in branch `defishares`, see
+[defishares-docs/Gold-Feed-Policy.md](defishares-docs/Gold-Feed-Policy.md).
+
 * [Getting Started](#getting-started)
 * [Support](#support)
 * [Using Built-In APIs](#using-built-in-apis)
