@@ -1,17 +1,96 @@
-BitShares Core
-==============
+DefiShares Core
+===============
 
-[BitShares Core](https://github.com/bitshares/bitshares-core) is the BitShares blockchain node software and command-line wallet software.
-For UI reference wallet software (browser-based wallet and desktop wallet) visit [BitShares UI](https://github.com/bitshares/bitshares-ui).
+[DefiShares Core](https://github.com/defishares-bro/defishares-core) is the DefiShares blockchain
+node software and command-line wallet software. This repository is maintained as a DefiShares fork
+of BitShares Core and contains DefiShares-specific protocol changes on branch `defishares`.
 
-Visit [BitShares.github.io](https://bitshares.github.io/) to learn about BitShares and join the community at [BitSharesTalk.org](https://bitsharestalk.org/).
+Fork Relationship
+-----------------
 
-Information for developers can be found in the [Wiki](https://github.com/bitshares/bitshares-core/wiki) and the [BitShares Developer Documentation Portal](https://docs.bitshares.dev/). Users interested in how BitShares works can go to the [BitShares Documentation](https://docs.bitshares.eu/) site.
+DefiShares Core is a fork of the upstream
+[`bitshares/bitshares-core`](https://github.com/bitshares/bitshares-core) codebase.
 
-Visit [Awesome BitShares](https://github.com/bitshares/awesome-bitshares) to find more resources and links E.G. chat groups, client libraries and extended APIs.
+The fork keeps the general Graphene / BitShares node architecture, build system, database layout,
+network stack, wallet tooling, and most of the surrounding chain infrastructure from upstream.
+At the same time, it intentionally diverges at the smartcoin protocol layer to support the
+DefiShares economic model.
 
-For DefiShares-specific smartcoin feed changes in branch `defishares`, see
+In practical terms, this means:
+
+- the repository started from BitShares Core source code rather than from a new codebase;
+- most generic chain, wallet, API, and plugin infrastructure still comes from the upstream lineage;
+- DefiShares-specific behavior is introduced through targeted protocol and chain logic changes;
+- upstream BitShares documentation may still help for generic internals, but protocol behavior for
+  smartcoins should be understood from DefiShares documentation first.
+
+Current DefiShares Differences
+------------------------------
+
+Compared with upstream BitShares Core, the current DefiShares branch already changes the following
+behavior:
+
+1. GOLD-centered feed model
+
+   Upstream BitShares expects BTS-backed smartcoins to receive direct witness feeds in
+   `TARGET/BTS`. DefiShares replaces that with a GOLD-centered routing model.
+
+2. Automatic `GOLD/BTS` pricing
+
+   `GOLD` is treated as the protocol anchor asset. Its effective `GOLD/BTS` settlement price is
+   generated automatically by chain logic from a fixed formula, rather than being directly
+   witness-authored.
+
+3. Other bitassets publish `TARGET/GOLD`
+
+   For non-GOLD BTS-backed smartcoins, witnesses publish `TARGET/GOLD`. The chain then derives the
+   effective `TARGET/BTS` price internally and stores it in `current_feed`.
+
+4. Direct `TARGET/BTS` publishing is rejected once GOLD exists
+
+   After the GOLD anchor is available, non-GOLD BTS-backed assets are forced onto the GOLD route
+   instead of the legacy direct core-feed route.
+
+5. Fixed `ICR = 2.0`
+
+   All DefiShares-managed bitassets use a fixed initial collateral ratio of `2.0x`
+   (`initial_collateral_ratio = 2000`). This is enforced by chain logic and is no longer left to
+   witness feed extensions as an effective runtime control.
+
+6. Settlement is disabled
+
+   DefiShares-managed bitassets reject both normal force settlement and global settlement paths.
+
+7. Margin-call liquidation is disabled
+
+   The traditional strong-liquidation / margin-call processing path is bypassed for
+   DefiShares-managed bitassets.
+
+8. Low-collateral positions become repair-only
+
+   When a position falls below `CR < 2.0`, the owner may still repay debt, add collateral, or
+   fully close the position, but may not borrow more or withdraw collateral.
+
+9. Effective collateral checks follow derived `current_feed`
+
+   DefiShares deliberately separates witness median input from the effective chain-derived feed.
+   For this reason, collateralization caches are refreshed from `current_feed`, not only from
+   `median_feed`.
+
+10. DefiShares-specific tests and protocol documentation were added
+
+   The branch includes focused bitasset regression tests and a dedicated protocol note documenting
+   the feed and collateral policy changes.
+
+For DefiShares-specific smartcoin feed and collateral policy changes, see
 [defishares-docs/Gold-Feed-Policy.md](defishares-docs/Gold-Feed-Policy.md).
+
+Upstream BitShares materials are still useful as background reference for generic Graphene /
+BitShares architecture:
+
+- [BitShares UI](https://github.com/bitshares/bitshares-ui)
+- [BitShares Developer Documentation Portal](https://docs.bitshares.dev/)
+- [BitShares Documentation](https://docs.bitshares.eu/)
 
 * [Getting Started](#getting-started)
 * [Support](#support)
@@ -20,22 +99,22 @@ For DefiShares-specific smartcoin feed changes in branch `defishares`, see
 * [FAQ](#faq)
 * [License](#license)
 
-|Branch|Build Status|
-|---|---|
-|`master`|[![](https://github.com/bitshares/bitshares-core/workflows/macOS/badge.svg?branch=master)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"macOS"+branch%3Amaster) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Debug/badge.svg?branch=master)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Debug"+branch%3Amaster) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Release/badge.svg?branch=master)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Release"+branch%3Amaster) [![](https://github.com/bitshares/bitshares-core/workflows/Windows%20MinGW64/badge.svg?branch=master)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Windows+MinGW64"+branch%3Amaster) [![](https://github.com/bitshares/bitshares-core/workflows/Docker/badge.svg?branch=master)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A%22Docker%22+branch%3Amaster)|
-|`develop`|[![](https://github.com/bitshares/bitshares-core/workflows/macOS/badge.svg?branch=develop)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"macOS"+branch%3Adevelop) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Debug/badge.svg?branch=develop)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Debug"+branch%3Adevelop) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Release/badge.svg?branch=develop)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Release"+branch%3Adevelop) [![](https://github.com/bitshares/bitshares-core/workflows/Windows%20MinGW64/badge.svg?branch=develop)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Windows+MinGW64"+branch%3Adevelop) [![](https://github.com/bitshares/bitshares-core/workflows/Docker/badge.svg?branch=develop)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A%22Docker%22+branch%3Adevelop)|
-|`hardfork`|[![](https://github.com/bitshares/bitshares-core/workflows/macOS/badge.svg?branch=hardfork)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"macOS"+branch%3Ahardfork) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Debug/badge.svg?branch=hardfork)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Debug"+branch%3Ahardfork) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Release/badge.svg?branch=hardfork)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Release"+branch%3Ahardfork) [![](https://github.com/bitshares/bitshares-core/workflows/Windows%20MinGW64/badge.svg?branch=hardfork)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Windows+MinGW64"+branch%3Ahardfork) [![](https://github.com/bitshares/bitshares-core/workflows/Docker/badge.svg?branch=hardfork)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A%22Docker%22+branch%3Ahardfork)|
-|`testnet`|[![](https://github.com/bitshares/bitshares-core/workflows/macOS/badge.svg?branch=testnet)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"macOS"+branch%3Atestnet) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Debug/badge.svg?branch=testnet)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Debug"+branch%3Atestnet) [![](https://github.com/bitshares/bitshares-core/workflows/Ubuntu%20Release/badge.svg?branch=testnet)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Ubuntu+Release"+branch%3Atestnet) [![](https://github.com/bitshares/bitshares-core/workflows/Windows%20MinGW64/badge.svg?branch=testnet)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A"Windows+MinGW64"+branch%3Atestnet) [![](https://github.com/bitshares/bitshares-core/workflows/Docker/badge.svg?branch=testnet)](https://github.com/bitshares/bitshares-core/actions?query=workflow%3A%22Docker%22+branch%3Atestnet)|
-|`master` of `bitshares-fc`|[![](https://github.com/bitshares/bitshares-fc/workflows/macOS/badge.svg?branch=master)](https://github.com/bitshares/bitshares-fc/actions?query=workflow%3A"macOS"+branch%3Amaster) [![](https://github.com/bitshares/bitshares-fc/workflows/Ubuntu%20Debug/badge.svg?branch=master)](https://github.com/bitshares/bitshares-fc/actions?query=workflow%3A"Ubuntu+Debug"+branch%3Amaster) [![](https://github.com/bitshares/bitshares-fc/workflows/Ubuntu%20Release/badge.svg?branch=master)](https://github.com/bitshares/bitshares-fc/actions?query=workflow%3A"Ubuntu+Release"+branch%3Amaster)|
+Current repository:
+
+- primary development branch: `defishares`
+- repository URL: `https://github.com/defishares-bro/defishares-core`
+- upstream base: `https://github.com/bitshares/bitshares-core`
 
 
 Getting Started
 ---------------
 
 Build instructions and additional documentation are available in the
-[Wiki](https://github.com/bitshares/bitshares-core/wiki).
+[docs](docs) directory and the
+[DefiShares repository wiki](https://github.com/defishares-bro/defishares-core/wiki).
 
-Prebuilt binaries can be found in the [releases page](https://github.com/bitshares/bitshares-core/releases) for download.
+Prebuilt binaries, if published, can be found on the
+[DefiShares releases page](https://github.com/defishares-bro/defishares-core/releases).
 
 
 ### Installing Node and Command-Line Wallet Software
@@ -49,9 +128,9 @@ We recommend building on Ubuntu 20.04 LTS (64-bit)
 
 **Build Node And Command-Line Wallet:**
 
-    git clone https://github.com/bitshares/bitshares-core.git
-    cd bitshares-core
-    git checkout master # may substitute "master" with current release tag
+    git clone https://github.com/defishares-bro/defishares-core.git
+    cd defishares-core
+    git checkout defishares
     git submodule update --init --recursive
     mkdir build
     cd build
@@ -60,9 +139,9 @@ We recommend building on Ubuntu 20.04 LTS (64-bit)
 
 **Upgrade Node And Command-Line Wallet:**
 
-    cd bitshares-core
-    git remote set-url origin https://github.com/bitshares/bitshares-core.git
-    git checkout master
+    cd defishares-core
+    git remote set-url origin https://github.com/defishares-bro/defishares-core.git
+    git checkout defishares
     git remote set-head origin --auto
     git pull
     git submodule update --init --recursive # this command may fail
@@ -75,22 +154,22 @@ We recommend building on Ubuntu 20.04 LTS (64-bit)
 
 **NOTE:**
 
-* BitShares requires a 64-bit operating system to build, and will not build on a 32-bit OS. Tested operating systems:
+* DefiShares Core requires a 64-bit operating system to build, and will not build on a 32-bit OS. Tested operating systems:
   * Linux (heavily tested with Ubuntu LTS releases)
   * macOS (various versions)
   * Windows (various versions, Visual Studio and MinGW)
   * OpenBSD (various versions)
 
-* BitShares requires [Boost](https://www.boost.org/) libraries to build, supports version `1.58` to `1.74`.
+* DefiShares Core requires [Boost](https://www.boost.org/) libraries to build, supports version `1.58` to `1.74`.
 Newer versions may work, but have not been tested.
 If your system came pre-installed with a version of Boost libraries that you do not wish to use, you may
-manually build your preferred version and use it with BitShares by specifying it on the CMake command line.
+manually build your preferred version and use it with DefiShares Core by specifying it on the CMake command line.
 
   Example: `cmake -DBOOST_ROOT=/path/to/boost ..`
 
-* BitShares requires [OpenSSL](https://www.openssl.org/) libraries to build, supports version `1.0.2` to `1.1.1`.
+* DefiShares Core requires [OpenSSL](https://www.openssl.org/) libraries to build, supports version `1.0.2` to `1.1.1`.
 If your system came pre-installed with a version of OpenSSL libraries that you do not wish to use, you may
-manually build your preferred version and use it with BitShares by specifying it on the CMake command line.
+manually build your preferred version and use it with DefiShares Core by specifying it on the CMake command line.
 
   Example: `cmake -DOPENSSL_ROOT_DIR=/path/to/openssl ..`
 
@@ -99,7 +178,7 @@ manually build your preferred version and use it with BitShares by specifying it
 
 **Run Node Software:**
 
-Stay on `bitshares-core/build` directory before you run the below `witness_node` command
+Stay on `defishares-core/build` directory before you run the below `witness_node` command
 
     ./programs/witness_node/witness_node
 
@@ -113,7 +192,7 @@ For stopping the node run cleanly, you will need to access the node run terminal
 It's recommended to use linux command [screen](https://help.ubuntu.com/community/Screen) to initiate the node run so you can go back to the node run screen to stop it.
 
 
-**IMPORTANT:** By default the node will start in reduced memory mode by using some of the commands detailed in [Memory reduction for nodes](https://github.com/bitshares/bitshares-core/wiki/Memory-reduction-for-nodes).
+**IMPORTANT:** By default the node will start in reduced memory mode by using some of the commands detailed in [Memory reduction for nodes](docs/Memory-Reduction-for-Nodes.md).
 In order to run a full node with all the account histories which usually unnecessary, you need to remove `partial-operations` and `max-ops-per-account` from your config file. Please note that currently(2018-10-17) a full node will need more than 160GB of RAM to operate and required memory is growing fast. Consider the following table as **minimal requirements** before running a node:
 
 | Default | Full | Minimal  | ElasticSearch
@@ -137,7 +216,7 @@ You can run the program with `--help` parameter to see more info:
 
 ### Using Command-Line Wallet
 
-Stay on `bitshares-core/build` directory before you run the below `cli_wallet` command
+Stay on `defishares-core/build` directory before you run the below `cli_wallet` command
 
     ./programs/cli_wallet/cli_wallet
 
@@ -193,28 +272,24 @@ Use `gethelp <COMMAND>` to see more info about individual commands. E.G.
     >>> gethelp get_order_book
 
 The definition of all commands is available in the
-[wallet.hpp](https://github.com/bitshares/bitshares-core/blob/master/libraries/wallet/include/graphene/wallet/wallet.hpp) source code file.
-Corresponding documentation can be found in the [Doxygen documentation](https://bitshares.github.io/doxygen/classgraphene_1_1wallet_1_1wallet__api.html).
+[wallet.hpp](https://github.com/defishares-bro/defishares-core/blob/defishares/libraries/wallet/include/graphene/wallet/wallet.hpp) source code file.
+Corresponding upstream Doxygen documentation can be found in the [BitShares Doxygen documentation](https://bitshares.github.io/doxygen/classgraphene_1_1wallet_1_1wallet__api.html).
 
 You can run the program with `--help` parameter to see more info:
 
     ./programs/cli_wallet/cli_wallet --help
 
-There is also some info in the [Wiki](https://github.com/bitshares/bitshares-core/wiki/CLI-Wallet-Cookbook).
+There is also some info in the [docs](docs) directory and in upstream BitShares wiki materials such as the [CLI Wallet Cookbook](https://github.com/bitshares/bitshares-core/wiki/CLI-Wallet-Cookbook).
 
 
 Support
 -------
 
-Technical support is available in the [BitSharesTalk technical support subforum](https://bitsharestalk.org/index.php?board=45.0).
+DefiShares Core bugs can be reported directly to the [issue tracker](https://github.com/defishares-bro/defishares-core/issues).
 
-BitShares Core bugs can be reported directly to the [issue tracker](https://github.com/bitshares/bitshares-core/issues).
+Questions and design discussions can be posted in [GitHub Discussions](https://github.com/defishares-bro/defishares-core/discussions).
 
-Questions can be posted in [Github Discussions](https://github.com/bitshares/bitshares-core/discussions).
-
-BitShares UI bugs should be reported to the [UI issue tracker](https://github.com/bitshares/bitshares-ui/issues).
-
-Up to date online Doxygen documentation can be found at [https://bitshares.github.io/doxygen](https://bitshares.github.io/doxygen/hierarchy.html).
+Upstream Doxygen documentation remains useful for code navigation at [https://bitshares.github.io/doxygen](https://bitshares.github.io/doxygen/hierarchy.html).
 
 
 Using Built-In APIs
@@ -246,8 +321,8 @@ When using an HTTP client, the API set ID can be replaced by the API set name, E
     $ curl --data '{"jsonrpc": "2.0", "method": "call", "params": ["database", "get_accounts", [["1.2.0"]]], "id": 1}' http://127.0.0.1:8090/
 
 The definition of all node APIs is available in the source code files including
-[database_api.hpp](https://github.com/bitshares/bitshares-core/blob/master/libraries/app/include/graphene/app/database_api.hpp)
-and [api.hpp](https://github.com/bitshares/bitshares-core/blob/master/libraries/app/include/graphene/app/api.hpp).
+[database_api.hpp](https://github.com/defishares-bro/defishares-core/blob/defishares/libraries/app/include/graphene/app/database_api.hpp)
+and [api.hpp](https://github.com/defishares-bro/defishares-core/blob/defishares/libraries/app/include/graphene/app/api.hpp).
 Corresponding documentation can be found in Doxygen:
 * [database API](https://bitshares.github.io/doxygen/classgraphene_1_1app_1_1database__api.html)
 * [other APIs](https://bitshares.github.io/doxygen/namespacegraphene_1_1app.html)
@@ -306,7 +381,7 @@ necessary to use the node:
 Note: the `login` API set is always accessible.
 
 Passwords are stored in `base64` as salted `sha256` hashes.  A simple Python script,
-[`saltpass.py`](https://github.com/bitshares/bitshares-core/blob/master/programs/witness_node/saltpass.py)
+[`saltpass.py`](https://github.com/defishares-bro/defishares-core/blob/defishares/programs/witness_node/saltpass.py)
 is available to obtain hash and salt values from a password.
 A single asterisk `"*"` may be specified as username or password hash to accept any value.
 
@@ -364,8 +439,8 @@ FAQ
 
     The second number specifies the *type*.  The type of the object determines what fields it has.  For a
     complete list of type IDs, see `GRAPHENE_DEFINE_IDS(protocol, protocol_ids ...)` in
-    [protocol/types.hpp](https://github.com/bitshares/bitshares-core/blob/master/libraries/protocol/include/graphene/protocol/types.hpp)
-    and `GRAPHENE_DEFINE_IDS(chain, implementation_ids ...)` in [chain/types.hpp](https://github.com/bitshares/bitshares-core/blob/master/libraries/chain/include/graphene/chain/types.hpp).
+    [protocol/types.hpp](https://github.com/defishares-bro/defishares-core/blob/defishares/libraries/protocol/include/graphene/protocol/types.hpp)
+    and `GRAPHENE_DEFINE_IDS(chain, implementation_ids ...)` in [chain/types.hpp](https://github.com/defishares-bro/defishares-core/blob/defishares/libraries/chain/include/graphene/chain/types.hpp).
 
     The third number specifies the *instance*.  The instance of the object is different for each individual
     object.
@@ -400,5 +475,5 @@ FAQ
 License
 -------
 
-BitShares Core is under the MIT license. See [LICENSE](https://github.com/bitshares/bitshares-core/blob/master/LICENSE.txt)
+DefiShares Core is under the MIT license. See [LICENSE](https://github.com/defishares-bro/defishares-core/blob/defishares/LICENSE.txt)
 for more information.
