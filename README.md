@@ -32,24 +32,24 @@ behavior:
 
 1. GOLD-centered feed model
 
-   Upstream BitShares expects BTS-backed smartcoins to receive direct witness feeds in
-   `TARGET/BTS`. DefiShares replaces that with a GOLD-centered routing model.
+   In DefiShares, core-asset-backed smartcoins no longer use the legacy direct core-feed route in
+   `TARGET/DFS`. DefiShares replaces that path with a GOLD-centered routing model.
 
-2. Automatic `GOLD/BTS` pricing
+2. Automatic `GOLD/DFS` pricing
 
-   `GOLD` is treated as the protocol anchor asset. Its effective `GOLD/BTS` settlement price is
+   `GOLD` is treated as the protocol anchor asset. Its effective `GOLD/DFS` settlement price is
    generated automatically by chain logic from a fixed formula, rather than being directly
    witness-authored.
 
 3. Other bitassets publish `TARGET/GOLD`
 
-   For non-GOLD BTS-backed smartcoins, witnesses publish `TARGET/GOLD`. The chain then derives the
-   effective `TARGET/BTS` price internally and stores it in `current_feed`.
+   For non-GOLD DefiShares core-backed smartcoins, witnesses publish `TARGET/GOLD`. The chain then
+   derives the effective `TARGET/DFS` price internally and stores it in `current_feed`.
 
-4. Direct `TARGET/BTS` publishing is rejected once GOLD exists
+4. Direct `TARGET/DFS` publishing is rejected once GOLD exists
 
-   After the GOLD anchor is available, non-GOLD BTS-backed assets are forced onto the GOLD route
-   instead of the legacy direct core-feed route.
+   After the GOLD anchor is available, non-GOLD DefiShares core-backed assets are forced onto the
+   GOLD route instead of the legacy direct core-feed route.
 
 5. Fixed `ICR = 2.0`
 
@@ -453,7 +453,7 @@ FAQ
     do not).
 
     All asset IDs are of the form `1.3.x`.  If you were the 29th asset to be registered,
-    your asset's ID will be `1.3.29`.  Asset `0` is special (it's BTS, which is considered the "core asset").
+    your asset's ID will be `1.3.29`.  Asset `0` is special (it's DFS, which is considered the "core asset").
 
     The first and second number together identify the kind of thing you're talking about (`1.2` for accounts,
     `1.3` for assets).  The third number identifies the particular thing.

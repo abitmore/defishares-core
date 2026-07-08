@@ -8,7 +8,8 @@ This document describes the current DefiShares smartcoin behavior on branch `def
 
 DefiShares no longer follows upstream BitShares smartcoin policy in three important areas:
 
-1. the feed anchor is changed from direct `TARGET/BTS` witness feeds to a GOLD-centered model;
+1. the feed anchor is changed from the legacy direct `TARGET/DFS` core-feed route to a
+   GOLD-centered model;
 2. all DefiShares-managed bitassets use a fixed initial collateral ratio (`ICR`) of `2.0`;
 3. settlement and margin-call style liquidation paths are disabled, and low-collateral positions
    are restricted to repair-only updates.
@@ -21,9 +22,9 @@ Scope of the Current Implementation
 
 Implemented in the current DefiShares branch:
 
-- automatic chain-generated `GOLD/BTS` pricing;
-- witness publication of `TARGET/GOLD` for other BTS-backed bitassets;
-- derivation of effective `TARGET/BTS` from `TARGET/GOLD * GOLD/BTS`;
+- automatic chain-generated `GOLD/DFS` pricing;
+- witness publication of `TARGET/GOLD` for other DFS-backed bitassets;
+- derivation of effective `TARGET/DFS` from `TARGET/GOLD * GOLD/DFS`;
 - fixed `ICR = 2.0` for DefiShares-managed bitassets;
 - disabled user settlement and global settlement for DefiShares-managed bitassets;
 - disabled margin-call processing for DefiShares-managed bitassets;
@@ -42,30 +43,31 @@ Protocol-Level Behavior Changes
 Compared with upstream BitShares behavior, DefiShares changes smartcoin protocol semantics in the
 following ways:
 
-1. GOLD becomes the protocol feed anchor for BTS-backed bitassets
+1. GOLD becomes the protocol feed anchor for DefiShares core-backed bitassets
 
-   Witnesses no longer publish direct effective `TARGET/BTS` prices for BTS-backed smartcoins once
-   `GOLD` exists. Instead, `GOLD` is the common routing asset.
+   Witnesses no longer publish direct effective `TARGET/DFS` prices for DefiShares core-backed
+   smartcoins once `GOLD` exists. Instead, `GOLD` is the common routing asset.
 
 2. GOLD pricing is system-generated
 
-   `GOLD/BTS` is calculated by deterministic chain logic. Witnesses do not control the effective
+   `GOLD/DFS` is calculated by deterministic chain logic. Witnesses do not control the effective
    GOLD settlement price.
 
 3. Other DefiShares bitassets publish `TARGET/GOLD`
 
-   For BTS-backed bitassets other than `GOLD`, the witness entry point becomes `TARGET/GOLD`.
-   The chain stores this witness median, then derives the effective `TARGET/BTS` current feed.
+   For DefiShares core-backed bitassets other than `GOLD`, the witness entry point becomes
+   `TARGET/GOLD`.
+   The chain stores this witness median, then derives the effective `TARGET/DFS` current feed.
 
-4. Direct `TARGET/BTS` witness publication is rejected after GOLD exists
+4. Direct `TARGET/DFS` witness publication is rejected after GOLD exists
 
-   This is an intentional protocol change. Once the GOLD anchor exists, a non-GOLD BTS-backed
-   bitasset must use the GOLD route rather than the old direct core route.
+   This is an intentional protocol change. Once the GOLD anchor exists, a non-GOLD DefiShares
+   core-backed bitasset must use the GOLD route rather than the old direct core route.
 
 5. Effective feed consumption now uses derived `current_feed`
 
    Witness median data may intentionally remain `TARGET/GOLD`, while the rest of the debt engine
-   consumes the derived `TARGET/BTS` `current_feed`.
+   consumes the derived `TARGET/DFS` `current_feed`.
 
 6. All DefiShares-managed bitassets use fixed `ICR = 2.0`
 
@@ -95,11 +97,11 @@ The chain treats a market-issued asset whose symbol is exactly `GOLD` as the anc
 `GOLD` does not depend on witness-published settlement prices. Its settlement price is calculated
 internally as:
 
-`GOLD/BTS = V0 * 10^(2 * sqrt(years_since_creation))`
+`GOLD/DFS = V0 * 10^(2 * sqrt(years_since_creation))`
 
 where:
 
-- `V0` is currently anchored as `1 GOLD / 1 BTS`;
+- `V0` is currently anchored as `1 GOLD / 1 DFS`;
 - `years_since_creation` is derived from elapsed blocks;
 - elapsed time is quantized to `9600`-block intervals.
 
@@ -112,14 +114,15 @@ Implementation details:
 For GOLD this means:
 
 - `base = GOLD`
-- `quote = BTS`
+- `quote = DFS`
 
 The implementation is intentionally written in this direction so the algorithm does not become the
 inverse by mistake.
 
-### 2. Other BTS-backed bitassets publish TARGET/GOLD
+### 2. Other DefiShares core-backed bitassets publish TARGET/GOLD
 
-Once a valid `GOLD` bitasset exists, non-GOLD BTS-backed bitassets are expected to publish:
+Once a valid `GOLD` bitasset exists, non-GOLD DefiShares core-backed bitassets are expected to
+publish:
 
 `TARGET/GOLD`
 
@@ -130,14 +133,14 @@ Examples:
 
 These values are stored as witness median input. The chain then derives:
 
-`TARGET/BTS = TARGET/GOLD * GOLD/BTS`
+`TARGET/DFS = TARGET/GOLD * GOLD/DFS`
 
-The derived `TARGET/BTS` is written to `current_feed`, which is the feed consumed by collateral
+The derived `TARGET/DFS` is written to `current_feed`, which is the feed consumed by collateral
 and debt logic.
 
-### 3. Direct TARGET/BTS publishing is rejected after GOLD exists
+### 3. Direct TARGET/DFS publishing is rejected after GOLD exists
 
-After `GOLD` exists, a non-GOLD BTS-backed bitasset may no longer publish a direct `TARGET/BTS`
+After `GOLD` exists, a non-GOLD DFS-backed bitasset may no longer publish a direct `TARGET/DFS`
 feed. This is enforced during feed evaluation.
 
 Collateral and Risk Policy
@@ -189,7 +192,7 @@ Current Feed and Cache Semantics
 This branch depends on a specific distinction:
 
 - `median_feed` preserves the witness-supplied source feed, which may be `TARGET/GOLD`;
-- `current_feed` stores the effective derived feed, which is `TARGET/BTS`.
+- `current_feed` stores the effective derived feed, which is `TARGET/DFS`.
 
 For this reason, collateral caches must follow `current_feed`, not only `median_feed`.
 
@@ -257,13 +260,13 @@ Scheduled recalculation happens from `database::update_global_dynamic_data()` on
 Behavior:
 
 1. If asset is `GOLD`
-   - recompute automatic `GOLD/BTS`;
+   - recompute automatic `GOLD/DFS`;
    - write it to both `median_feed` and `current_feed`;
    - mirror it into `core_exchange_rate`.
 
 2. If asset is not `GOLD`
    - preserve witness median input;
-   - if median feed is `TARGET/GOLD` and the backing asset is BTS, derive `TARGET/BTS`;
+   - if median feed is `TARGET/GOLD` and the backing asset is DFS, derive `TARGET/DFS`;
    - write the effective derived value into `current_feed`.
 
 3. If asset is DefiShares-managed
@@ -282,7 +285,7 @@ source format.
 During evaluation:
 
 - direct backing-asset feed is still accepted in the traditional case;
-- after GOLD exists, non-GOLD BTS-backed assets must publish `TARGET/GOLD`;
+- after GOLD exists, non-GOLD DFS-backed assets must publish `TARGET/GOLD`;
 - GOLD itself uses automatic chain-generated pricing.
 
 For debt-position updates:
@@ -309,9 +312,9 @@ These tests verify:
 
 - GOLD initializes automatically;
 - GOLD reprices on the expected scheduled boundary;
-- `TARGET/GOLD` is converted into `TARGET/BTS`;
+- `TARGET/GOLD` is converted into `TARGET/DFS`;
 - witness median is taken before derivation;
-- manual direct `TARGET/BTS` publication is rejected once GOLD exists;
+- manual direct `TARGET/DFS` publication is rejected once GOLD exists;
 - the effective `ICR` is fixed to `2.0`;
 - exact `2.0x` collateralization is accepted;
 - settlement and margin-call paths are disabled;
@@ -325,13 +328,13 @@ Test command used during implementation:
 Current Boundaries and Developer Notes
 --------------------------------------
 
-1. This design currently targets BTS-backed market-issued assets managed by the DefiShares policy
+1. This design currently targets DFS-backed market-issued assets managed by the DefiShares policy
    helpers.
 
 2. The symbol `GOLD` is a hard-coded anchor. If future work wants multiple anchors or a different
    naming policy, the current implementation will need refactoring.
 
-3. The initial anchor value is currently fixed at `1 GOLD / 1 BTS`. If the business rule changes,
+3. The initial anchor value is currently fixed at `1 GOLD / 1 DFS`. If the business rule changes,
    update:
 
    - `DEFISHARES_INITIAL_GOLD_PER_BTS_NUMERATOR`
