@@ -716,11 +716,17 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
 
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
 
-      // votes doesn't change
+      // tickets do not vote, so locking core reduces voting stake immediately
+      expected_votes[4] = 74;
+      expected_votes[7] = 67 - 67 * 3 / 8;
       for( size_t i = 0; i < total; ++i )
       {
          BOOST_CHECK_EQUAL( wit_ids[i](db).total_votes, expected_votes[i] );
       }
+
+      expected_active_witnesses = { wit_ids[0], wit_ids[1], wit_ids[2],
+                                    wit_ids[3], wit_ids[4], wit_ids[5],
+                                    wit_ids[6], wit_ids[8], wit_ids[12] };
       BOOST_CHECK( db.get_global_properties().active_witnesses == expected_active_witnesses );
 
       // some days passed
@@ -732,10 +738,10 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       expected_votes[1] = 111; // 225 days
       expected_votes[2] = 112; // 270 days
       expected_votes[3] = 113; // 315 days
-      expected_votes[4] = 114+40 - (114+40) / 8; // 360 days
+      expected_votes[4] = 74 - 74 / 8; // 360 days
       expected_votes[5] = 115 - 115 * 2 / 8; // 405 days
-      expected_votes[6] = 116 - 116 * 3 / 8; // 450 days, 73
-      expected_votes[7] = 117+50 - (117+50) * 4 / 8; // 495 days, 84
+      expected_votes[6] = 116 - 116 * 3 / 8; // 450 days
+      expected_votes[7] = 67 - 67 * 4 / 8; // 495 days
       expected_votes[8] = 118 - 118 * 5 / 8 + 122; // 540 days
       expected_votes[9] = 119 - 119 * 6 / 8; // 585 days
       expected_votes[10] = 120 - 120 * 7 / 8; // 630 days
@@ -750,7 +756,7 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
 
       expected_active_witnesses = { wit_ids[0], wit_ids[1], wit_ids[2],
                                     wit_ids[3], wit_ids[4], wit_ids[5],
-                                    wit_ids[7], wit_ids[8], wit_ids[12] };
+                                    wit_ids[6], wit_ids[8], wit_ids[12] };
       BOOST_CHECK( db.get_global_properties().active_witnesses == expected_active_witnesses );
 
       // some days passed
@@ -758,8 +764,6 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
 
       // check votes
-      expected_votes[4] = 114+40*3 - (114+40*3) / 8; // 375 days
-      expected_votes[7] = 117+50*3 - (117+50*3) * 4 / 8; // 510 days
       for( size_t i = 0; i < total; ++i )
       {
          BOOST_CHECK_EQUAL( wit_ids[i](db).total_votes, expected_votes[i] );
@@ -771,8 +775,6 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
 
       // check votes
-      expected_votes[4] = 114+40*7 - (114+40*7) / 8; // 390 days
-      expected_votes[7] = 117+50*7 - (117+50*7) * 4 / 8; // 525 days
       for( size_t i = 0; i < total; ++i )
       {
          BOOST_CHECK_EQUAL( wit_ids[i](db).total_votes, expected_votes[i] );
@@ -783,18 +785,15 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       generate_blocks( tick_start_time + fc::days(60) );
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
 
-      // pob activated
-      bool has_hf_2262 = ( HARDFORK_CORE_2262_PASSED( db.get_dynamic_global_properties().next_maintenance_time ) );
+      BOOST_REQUIRE( HARDFORK_CORE_2262_PASSED( db.get_dynamic_global_properties().next_maintenance_time ) );
       expected_votes[0] = 0; // 225 days
       expected_votes[1] = 0; // 270 days
       expected_votes[2] = 0; // 315 days
       expected_votes[3] = 0; // 360 days
-      int64_t base4 = 40 * 8 + (114 - 40) - 40;
-      expected_votes[4] = ( has_hf_2262 ? 0 : ( base4 - base4 * 2 / 8 ) ); // 405 days
+      expected_votes[4] = 0; // 405 days
       expected_votes[5] = 0; // 450 days
       expected_votes[6] = 0; // 495 days
-      int64_t base7 = 20 * 8 * 8 + ( has_hf_2262 ? 0 : ( (30 - 20) * 8 + (117 - 30 - 20) - (30 - 20) ) );
-      expected_votes[7] = base7 - base7 * 5 / 8; // 540 days
+      expected_votes[7] = 0; // 540 days
       expected_votes[8] = 0; // 585 days
       expected_votes[9] = 0; // 630 days
       expected_votes[10] = 0; // 675 days
@@ -808,25 +807,11 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       }
 
       expected_active_witnesses = original_wits;
-      expected_active_witnesses.erase( *expected_active_witnesses.rbegin() );
-      if( !has_hf_2262 )
-      {
-         expected_active_witnesses.erase( *expected_active_witnesses.rbegin() );
-         expected_active_witnesses.insert( wit_ids[4] );
-      }
-      expected_active_witnesses.insert( wit_ids[7] );
       BOOST_CHECK( db.get_global_properties().active_witnesses == expected_active_witnesses );
 
       // some days passed
       generate_blocks( tick_start_time + fc::days(60+180) );
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
-
-      has_hf_2262 = ( HARDFORK_CORE_2262_PASSED( db.get_dynamic_global_properties().next_maintenance_time ) );
-      // check votes
-      base4 = 40 * 6 + (114 - 40) - 40;
-      expected_votes[4] = ( has_hf_2262 ? 0 : (base4 - base4 * 6 / 8) ); // 585 days
-      base7 = 20 * 8 * 6 + (30 - 20) * 6 + (117 - 30 - 20) - (30 - 20);
-      expected_votes[7] = 0; // 720 days
 
       for( size_t i = 0; i < total; ++i )
       {
@@ -834,11 +819,6 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       }
 
       expected_active_witnesses = original_wits;
-      if( !has_hf_2262 )
-      {
-         expected_active_witnesses.erase( *expected_active_witnesses.rbegin() );
-         expected_active_witnesses.insert( wit_ids[4] );
-      }
       BOOST_CHECK( db.get_global_properties().active_witnesses == expected_active_witnesses );
 
    } FC_LOG_AND_RETHROW()
@@ -964,8 +944,8 @@ BOOST_AUTO_TEST_CASE( committee_votes_calculation )
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
       set_expiration( db, trx );
 
-      expected_votes[11] += 122/2;
-      expected_votes[12] = 122/2;
+      expected_votes[11] += 122;
+      expected_votes[12] = 122;
       for( size_t i = 0; i < total; ++i )
       {
          BOOST_CHECK_EQUAL( com_ids[i](db).total_votes, expected_votes[i] );
@@ -973,12 +953,77 @@ BOOST_AUTO_TEST_CASE( committee_votes_calculation )
 
       expected_active_committee_members = { com_ids[0], com_ids[1], com_ids[2],
                                             com_ids[3], com_ids[4], com_ids[5],
-                                            com_ids[6], com_ids[7], com_ids[11] };
+                                            com_ids[6], com_ids[11], com_ids[12] };
       current_committee_members = db.get_global_properties().active_committee_members;
       sort( current_committee_members.begin(), current_committee_members.end() );
       BOOST_CHECK( current_committee_members == expected_active_committee_members );
 
    } FC_LOG_AND_RETHROW()
+}
+
+BOOST_AUTO_TEST_CASE( debt_collateral_counts_for_votes_but_tickets_do_not )
+{
+   try
+   {
+      ACTORS( (feedproducer)(borrower)(candidate) );
+
+      upgrade_to_lifetime_member( borrower_id );
+      upgrade_to_lifetime_member( candidate_id );
+
+      const witness_id_type candidate_witness_id = create_witness( candidate_id, candidate_private_key ).get_id();
+      graphene::app::database_api db_api1( db );
+
+      transfer( committee_account, feedproducer_id, asset( 1000 ) );
+      transfer( committee_account, borrower_id, asset( 500 ) );
+
+      generate_blocks( HARDFORK_CORE_2262_TIME );
+      set_expiration( db, trx );
+
+      const auto& testbit = create_bitasset( "TESTBIT", feedproducer_id, 0, charge_market_fee );
+      update_feed_producers( testbit, { feedproducer_id } );
+
+      price_feed feed;
+      feed.settlement_price = testbit.amount( 1 ) / asset( 1 );
+      feed.maintenance_collateral_ratio = 1750;
+      feed.maximum_short_squeeze_ratio = 1100;
+      publish_feed( testbit, feedproducer, feed );
+
+      const auto get_candidate_votes = [&db_api1, &candidate]() -> uint64_t {
+         auto witness_object = db_api1.get_witness_by_account( candidate.name );
+         BOOST_REQUIRE( witness_object.valid() );
+         return witness_object->total_votes;
+      };
+
+      {
+         account_update_operation op;
+         op.account = borrower_id;
+         op.new_options = borrower.options;
+         op.new_options->votes.insert( candidate_witness_id(db).vote_id );
+         op.new_options->num_witness = 1;
+
+         trx.operations.clear();
+         trx.operations.push_back( op );
+         sign( trx, borrower_private_key );
+         PUSH_TX( db, trx, ~0 );
+         trx.clear();
+      }
+
+      generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
+      BOOST_CHECK_EQUAL( get_candidate_votes(), 0u );
+
+      const call_order_object* call_ptr = borrow( borrower, testbit.amount( 100 ), asset( 200 ) );
+      BOOST_REQUIRE( call_ptr != nullptr );
+
+      generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
+      BOOST_CHECK_EQUAL( get_candidate_votes(), 200u );
+
+      create_ticket( borrower_id, lock_forever, asset( 50 ) );
+      create_ticket( borrower_id, lock_720_days, asset( 25 ) );
+
+      generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
+      BOOST_CHECK_EQUAL( get_candidate_votes(), 200u );
+   }
+   FC_LOG_AND_RETHROW()
 }
 
 BOOST_AUTO_TEST_SUITE_END()

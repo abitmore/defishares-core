@@ -108,8 +108,7 @@ namespace graphene { namespace chain {
          /// Whether this account owns some CORE asset and is voting
          inline bool has_some_core_voting() const
          {
-            return is_voting && ( total_core_in_orders > 0 || core_in_balance > 0 || has_cashback_vb
-                                  || total_core_pol > 0 );
+            return is_voting && ( total_core_in_orders > 0 || core_in_balance > 0 || has_cashback_vb );
          }
 
          /**

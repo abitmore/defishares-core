@@ -1255,11 +1255,9 @@ void database::perform_chain_maintenance( const signed_block& next_block )
    struct vote_tally_helper {
       database& d;
       const global_property_object& props;
-      const dynamic_global_property_object& dprops;
       const time_point_sec now;
       const bool hf2103_passed;
       const bool hf2262_passed;
-      const bool pob_activated;
       const size_t two = 2;
       const size_t vid_committee = static_cast<size_t>( vote_id_type::committee ); // 0
       const size_t vid_witness = static_cast<size_t>( vote_id_type::witness ); // 1
@@ -1271,10 +1269,9 @@ void database::perform_chain_maintenance( const signed_block& next_block )
       optional<detail::vote_recalc_times> delegator_recalc_times;
 
       explicit vote_tally_helper( database& db )
-         : d(db), props( d.get_global_properties() ), dprops( d.get_dynamic_global_properties() ),
-           now( d.head_block_time() ), hf2103_passed( HARDFORK_CORE_2103_PASSED( now ) ),
-           hf2262_passed( HARDFORK_CORE_2262_PASSED( now ) ),
-           pob_activated( dprops.total_pob > 0 || dprops.total_inactive > 0 )
+         : d(db), props( d.get_global_properties() ), now( d.head_block_time() ),
+           hf2103_passed( HARDFORK_CORE_2103_PASSED( now ) ),
+           hf2262_passed( HARDFORK_CORE_2262_PASSED( now ) )
       {
          d._vote_tally_buffer.resize( props.next_available_vote_id, 0 );
          d._witness_count_histogram_buffer.resize( (props.parameters.maximum_witness_count / two) + 1, 0 );
@@ -1292,10 +1289,6 @@ void database::perform_chain_maintenance( const signed_block& next_block )
 
       void operator()( const account_object& stake_account, const account_statistics_object& stats )
       {
-         // PoB activation
-         if( pob_activated && stats.total_core_pob == 0 && stats.total_core_inactive == 0 )
-            return;
-
          if( props.parameters.count_non_member_votes || stake_account.is_member( now ) )
          {
             // There may be a difference between the account whose stake is voting and the one specifying opinions.
@@ -1307,7 +1300,7 @@ void database::perform_chain_maintenance( const signed_block& next_block )
 
             std::array<uint64_t,3> voting_stake; // 0=committee, 1=witness, 2=worker, as in vote_id_type::vote_type
             uint64_t num_committee_voting_stake; // number of committee members
-            voting_stake[vid_worker] = pob_activated ? 0 : stats.total_core_in_orders.value;
+            voting_stake[vid_worker] = stats.total_core_in_orders.value;
             voting_stake[vid_worker] += ( !hf2262_passed && stake_account.cashback_vb.valid() ) ?
                                              (*stake_account.cashback_vb)(d).balance.amount.value : 0;
             voting_stake[vid_worker] += hf2262_passed ? 0 : stats.core_in_balance.value;
@@ -1319,52 +1312,6 @@ void database::perform_chain_maintenance( const signed_block& next_block )
             uint64_t vp_committee = 0; ///<  the final voting power for the committees.
             uint64_t vp_witness = 0;   ///<  the final voting power for the witnesses.
             uint64_t vp_worker = 0;    ///<  the final voting power for the workers.
-
-            //PoB
-            const uint64_t pol_amount = stats.total_core_pol.value;
-            const uint64_t pol_value = stats.total_pol_value.value;
-            const uint64_t pob_amount = stats.total_core_pob.value;
-            const uint64_t pob_value = stats.total_pob_value.value;
-            if( 0 == pob_amount )
-            {
-               voting_stake[vid_worker] += pol_value;
-            }
-            else if( 0 == pol_amount ) // and pob_amount > 0
-            {
-               if( pob_amount <= voting_stake[vid_worker] )
-               {
-                  voting_stake[vid_worker] += ( pob_value - pob_amount );
-               }
-               else
-               {
-                  auto base_value = ( static_cast<fc::uint128_t>( voting_stake[vid_worker] ) * pob_value )
-                                    / pob_amount;
-                  voting_stake[vid_worker] = static_cast<uint64_t>( base_value );
-               }
-            }
-            else if( pob_amount <= pol_amount ) // pob_amount > 0 && pol_amount > 0
-            {
-               auto base_value = ( static_cast<fc::uint128_t>( pob_value ) * pol_value ) / pol_amount;
-               auto diff_value = ( static_cast<fc::uint128_t>( pob_amount ) * pol_value ) / pol_amount;
-               base_value += ( pol_value - diff_value );
-               voting_stake[vid_worker] += static_cast<uint64_t>( base_value );
-            }
-            else // pob_amount > pol_amount > 0
-            {
-               auto base_value = ( static_cast<fc::uint128_t>( pol_value ) * pob_value ) / pob_amount;
-               fc::uint128_t diff_amount = pob_amount - pol_amount;
-               if( diff_amount <= voting_stake[vid_worker] )
-               {
-                  auto diff_value = ( static_cast<fc::uint128_t>( pol_amount ) * pob_value ) / pob_amount;
-                  base_value += ( pob_value - diff_value );
-                  voting_stake[vid_worker] += static_cast<uint64_t>( base_value - diff_amount );
-               }
-               else // diff_amount > voting_stake[vid_worker]
-               {
-                  base_value += ( static_cast<fc::uint128_t>( voting_stake[vid_worker] ) * pob_value ) / pob_amount;
-                  voting_stake[vid_worker] = static_cast<uint64_t>( base_value );
-               }
-            }
 
             // Shortcut
             if( 0 == voting_stake[vid_worker] )
@@ -1401,8 +1348,6 @@ void database::perform_chain_maintenance( const signed_block& next_block )
                   voting_stake[vid_worker], opinion_account_stats.last_vote_time, *committee_recalc_times );
                vp_committee = voting_stake[vid_committee];
                num_committee_voting_stake = voting_stake[vid_committee];
-               if( opinion_account.num_committee_voted > 1 )
-                  voting_stake[vid_committee] /= opinion_account.num_committee_voted;
                voting_stake[vid_worker] = detail::vote_recalc_options::worker().get_recalced_voting_stake(
                   voting_stake[vid_worker], opinion_account_stats.last_vote_time, *worker_recalc_times );
                vp_worker = voting_stake[vid_worker];
