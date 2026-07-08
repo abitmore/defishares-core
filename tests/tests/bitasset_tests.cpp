@@ -85,6 +85,23 @@ void update_call_order( database_fixture& fixture, const account_object& account
    database_fixture::verify_asset_supplies( fixture.db );
 }
 
+void refresh_recent_vote( database_fixture& fixture, const account_object& account,
+                          const fc::ecc::private_key& private_key )
+{
+   set_expiration( fixture.db, fixture.trx );
+   fixture.trx.operations.clear();
+
+   account_update_operation op;
+   op.account = account.get_id();
+   op.new_options = account.options;
+   op.new_options->votes.insert( witness_id_type(1)( fixture.db ).vote_id );
+
+   fixture.trx.operations.push_back( op );
+   fixture.sign( fixture.trx, private_key );
+   PUSH_TX( fixture.db, fixture.trx, ~0 );
+   fixture.trx.clear();
+}
+
 } // namespace
 
 BOOST_AUTO_TEST_CASE( defishares_gold_feed_is_automatic )
@@ -236,6 +253,8 @@ BOOST_AUTO_TEST_CASE( defishares_fixed_icr_allows_exact_two_times_collateralizat
    BOOST_CHECK_EQUAL( bitusd.bitasset_data( db ).current_feed.initial_collateral_ratio, 2000 );
 
    transfer( committee_account, borrower_id, asset( 200 ) );
+   refresh_recent_vote( *this, borrower, borrower_private_key );
+   generate_block();
    const call_order_object* call_ptr = borrow( borrower, bitusd.amount( 100 ), asset( 200 ) );
    BOOST_REQUIRE( call_ptr != nullptr );
    BOOST_CHECK( call_ptr->collateralization() >= bitusd.bitasset_data( db ).current_initial_collateralization );
@@ -258,6 +277,8 @@ BOOST_AUTO_TEST_CASE( defishares_disables_settlement_and_margin_calls )
    publish_feed( bitusd, feedproducer, feed );
 
    transfer( committee_account, borrower_id, asset( 210 ) );
+   refresh_recent_vote( *this, borrower, borrower_private_key );
+   generate_block();
    const call_order_object* initial_call = borrow( borrower, bitusd.amount( 100 ), asset( 210 ) );
    BOOST_REQUIRE( initial_call != nullptr );
    const call_order_id_type call_id( initial_call->id );
@@ -292,6 +313,8 @@ BOOST_AUTO_TEST_CASE( defishares_low_cr_position_can_only_repair )
    publish_feed( bitusd, feedproducer, feed );
 
    transfer( committee_account, borrower_id, asset( 220 ) );
+   refresh_recent_vote( *this, borrower, borrower_private_key );
+   generate_block();
    const call_order_object* initial_call = borrow( borrower, bitusd.amount( 100 ), asset( 210 ) );
    BOOST_REQUIRE( initial_call != nullptr );
    const call_order_id_type call_id( initial_call->id );

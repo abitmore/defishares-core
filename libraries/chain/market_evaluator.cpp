@@ -574,6 +574,15 @@ void_result call_order_update_evaluator::do_evaluate(const call_order_update_ope
             && !( HARDFORK_CORE_2467_PASSED( next_maintenance_time ) && _closing_order ) )
       FC_THROW_EXCEPTION(insufficient_feeds, "Cannot borrow asset with no price feed.");
 
+   if( o.delta_debt.amount > 0 && defishares::manages_margin_positions( *_bitasset_data ) )
+   {
+      const auto& account_stats = d.get_account_stats_by_owner( o.funding_account );
+      FC_ASSERT( account_stats.last_vote_time != time_point_sec()
+                 && uint64_t( account_stats.last_vote_time.sec_since_epoch() ) + fc::days(365).to_seconds()
+                    > d.head_block_time().sec_since_epoch(),
+                 "Borrowing new bitassets requires the account to have voted within the last 365 days" );
+   }
+
    if( call_ptr && !_closing_order && defishares::manages_margin_positions( *_bitasset_data )
        && call_ptr->collateralization() < _bitasset_data->current_initial_collateralization )
    {
