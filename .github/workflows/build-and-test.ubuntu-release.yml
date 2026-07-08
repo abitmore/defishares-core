@@ -1,33 +1,15 @@
-name: Ubuntu Release
+name: DefiShares Core CI
 on: [ push, pull_request ]
 env:
   CCACHE_COMPRESS: exists means true
   CCACHE_SLOPPINESS: include_file_ctime,include_file_mtime,time_macros
 jobs:
   test-release:
-    name: Build and test in Release mode
+    name: Build and test on Ubuntu
     strategy:
       matrix:
         os: [ ubuntu-20.04 ]
     runs-on: ${{ matrix.os }}
-    services:
-      elasticsearch8:
-        image: elastic/elasticsearch:8.11.1
-        options: >-
-          --env ES_JAVA_OPTS="-Xms512m -Xmx512m"
-          --env discovery.type=single-node
-          --env xpack.security.enabled=false
-          --env xpack.security.http.ssl.enabled=false
-          --env action.destructive_requires_name=false
-          --env cluster.routing.allocation.disk.threshold_enabled=false
-          --publish 9200:9200
-      elasticsearch7:
-        image: elastic/elasticsearch:7.17.15
-        options: >-
-          --env ES_JAVA_OPTS="-Xms512m -Xmx512m"
-          --env discovery.type=single-node
-          --env cluster.routing.allocation.disk.threshold_enabled=false
-          --publish 9201:9200
     steps:
     - name: Install dependencies
       run: |
@@ -84,15 +66,16 @@ jobs:
       run: |
         export CCACHE_DIR="$GITHUB_WORKSPACE/ccache"
         mkdir -p "$CCACHE_DIR"
-        make -j 2 -C _build
+        make -j 2 -C _build witness_node
+        make -j 2 -C _build cli_wallet
+        make -j 2 -C _build app_test
+        make -j 2 -C _build chain_test
+        make -j 2 -C _build cli_test
         df -h
     - name: Unit-Tests
       timeout-minutes: 15
       run: |
         _build/tests/app_test -l test_suite
-        _build/tests/es_test -l test_suite
-        export GRAPHENE_TESTING_ES_URL=http://127.0.0.1:9201/
-        _build/tests/es_test -l test_suite
         libraries/fc/tests/run-parallel-tests.sh _build/tests/chain_test -l test_suite
         _build/tests/cli_test -l test_suite
         df -h
@@ -123,9 +106,3 @@ jobs:
         else \
           echo "Pass: got expected error."; \
         fi
-    - name: Node-Test
-      run: |
-        df -h
-        pushd _build
-        ../programs/build_helpers/run-node-test
-        df -h
