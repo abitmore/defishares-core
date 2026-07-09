@@ -305,6 +305,63 @@ BOOST_AUTO_TEST_CASE( defishares_disables_settlement_and_margin_calls )
    GRAPHENE_REQUIRE_THROW( force_global_settle( bitusd, bitusd.amount( 1 ) / asset( 1 ) ), fc::exception );
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE( defishares_low_price_sell_order_ignores_disabled_margin_calls )
+{ try {
+   ACTORS( (feedproducer)(borrower) );
+
+   const auto& gold = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                       GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   const auto& bitusd = create_bitasset( "USDBIT", feedproducer_id, 100, charge_market_fee,
+                                         GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS );
+   update_feed_producers( bitusd, { feedproducer_id } );
+
+   price_feed feed;
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 1 );
+   feed.maintenance_collateral_ratio = 1750;
+   feed.maximum_short_squeeze_ratio = 1100;
+   publish_feed( bitusd, feedproducer, feed );
+
+   transfer( committee_account, borrower_id, asset( 1000000000 ) );
+   refresh_recent_vote( *this, borrower, borrower_private_key );
+   generate_block();
+   const call_order_object* initial_call = borrow( borrower, bitusd.amount( 100 ), asset( 1000000000 ) );
+   BOOST_REQUIRE( initial_call != nullptr );
+   const call_order_id_type call_id( initial_call->id );
+
+   feed.settlement_price = bitusd.amount( 1 ) / gold.amount( 2 );
+   publish_feed( bitusd, feedproducer, feed );
+
+   set_expiration( db, trx );
+   trx.operations.clear();
+   limit_order_create_operation low_price_order_op;
+   low_price_order_op.seller = borrower_id;
+   low_price_order_op.amount_to_sell = bitusd.amount( 10 );
+   low_price_order_op.min_to_receive = asset( 1 );
+   low_price_order_op.expiration = db.head_block_time() + fc::days( 1 );
+   trx.operations.push_back( low_price_order_op );
+   db.current_fee_schedule().set_fee( trx.operations.back() );
+   PUSH_TX( db, trx, ~0 );
+   trx.clear();
+
+   bool found_low_price_order = false;
+   const auto& limit_idx = db.get_index_type<limit_order_index>().indices();
+   for( const limit_order_object& order : limit_idx )
+   {
+      if( order.seller == borrower_id && order.sell_asset_id() == bitusd.get_id()
+          && order.receive_asset_id() == asset_id_type() && order.for_sale == bitusd.amount( 10 ).amount )
+      {
+         found_low_price_order = true;
+         break;
+      }
+   }
+   BOOST_CHECK( found_low_price_order );
+
+   const auto* repriced_call = db.find( call_id );
+   BOOST_REQUIRE( repriced_call != nullptr );
+   BOOST_CHECK_EQUAL( repriced_call->debt.value, 100 );
+   BOOST_CHECK_EQUAL( repriced_call->collateral.value, 1000000000 );
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_CASE( defishares_low_cr_position_can_only_repair )
 { try {
    ACTORS( (feedproducer)(borrower) );

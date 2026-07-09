@@ -807,6 +807,7 @@ bool database::apply_order(const limit_order_object& new_order_object)
       if( sell_abd->options.short_backing_asset == recv_asset_id
           && !sell_abd->is_prediction_market
           && !sell_abd->is_globally_settled()
+          && !defishares::margin_calls_disabled( *sell_abd )
           && !sell_abd->current_feed.settlement_price.is_null() )
       {
          if( before_core_hardfork_1270 ) {
@@ -992,8 +993,7 @@ void database::apply_force_settlement( const force_settlement_object& new_settle
             || call_itr->collateralization() > bitasset.current_maintenance_collateralization )
          break;
       // TCR applies here
-      auto settle_price = after_core_hardfork_2582 ? bitasset.median_feed.settlement_price
-                                                   : bitasset.current_feed.settlement_price;
+      auto settle_price = defishares::margin_call_settlement_price( bitasset, after_core_hardfork_2582 );
       asset max_debt_to_cover( call_itr->get_max_debt_to_cover( call_pays_price,
                                                        settle_price,
                                                        bitasset.current_feed.maintenance_collateral_ratio,
@@ -1357,8 +1357,7 @@ database::match_result_type database::match( const limit_order_object& bid, cons
    auto head_time = head_block_time();
    bool after_core_hardfork_2582 = HARDFORK_CORE_2582_PASSED( head_time ); // Price feed issues
 
-   const auto& feed_price = after_core_hardfork_2582 ? bitasset.median_feed.settlement_price
-                                                     : bitasset.current_feed.settlement_price;
+   const auto feed_price = defishares::margin_call_settlement_price( bitasset, after_core_hardfork_2582 );
    const auto& maintenance_collateral_ratio = bitasset.current_feed.maintenance_collateral_ratio;
    optional<price> maintenance_collateralization;
    if( !before_core_hardfork_1270 )
@@ -2260,8 +2259,7 @@ bool database::check_call_orders( const asset_object& mia, bool enable_black_swa
 
          if( !before_core_hardfork_1270 )
          {
-            auto settle_price = after_core_hardfork_2582 ? bitasset.median_feed.settlement_price
-                                                         : bitasset.current_feed.settlement_price;
+            auto settle_price = defishares::margin_call_settlement_price( bitasset, after_core_hardfork_2582 );
             usd_to_buy.amount = call_order.get_max_debt_to_cover( call_pays_price,
                                                                 settle_price,
                                                                 bitasset.current_feed.maintenance_collateral_ratio,
@@ -2479,8 +2477,7 @@ bool database::match_force_settlements( const asset_bitasset_data_object& bitass
          return false;
 
       // TCR applies here
-      auto settle_price = after_core_hardfork_2582 ? bitasset.median_feed.settlement_price
-                                                   : bitasset.current_feed.settlement_price;
+      auto settle_price = defishares::margin_call_settlement_price( bitasset, after_core_hardfork_2582 );
       asset max_debt_to_cover( call_order.get_max_debt_to_cover( call_pays_price,
                                                        settle_price,
                                                        bitasset.current_feed.maintenance_collateral_ratio,

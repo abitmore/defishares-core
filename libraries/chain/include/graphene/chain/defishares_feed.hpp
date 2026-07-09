@@ -26,6 +26,8 @@ bool settlements_disabled( const asset_bitasset_data_object& bitasset );
 
 bool margin_calls_disabled( const asset_bitasset_data_object& bitasset );
 
+price margin_call_settlement_price( const asset_bitasset_data_object& bitasset, bool prefer_median_feed );
+
 const asset_object* find_gold_asset( const database& db );
 
 bool accepts_gold_quote_feed( const database& db,

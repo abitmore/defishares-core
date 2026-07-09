@@ -138,6 +138,23 @@ bool margin_calls_disabled( const asset_bitasset_data_object& bitasset )
    return manages_margin_positions( bitasset );
 }
 
+price margin_call_settlement_price( const asset_bitasset_data_object& bitasset, bool prefer_median_feed )
+{
+   if( prefer_median_feed && !bitasset.median_feed.settlement_price.is_null() )
+   {
+      const price& median_price = bitasset.median_feed.settlement_price;
+      const bool matches_backing_asset =
+            ( median_price.base.asset_id == bitasset.asset_id
+              && median_price.quote.asset_id == bitasset.options.short_backing_asset )
+         || ( median_price.quote.asset_id == bitasset.asset_id
+              && median_price.base.asset_id == bitasset.options.short_backing_asset );
+      if( matches_backing_asset )
+         return median_price;
+   }
+
+   return bitasset.current_feed.settlement_price;
+}
+
 const asset_object* find_gold_asset( const database& db )
 {
    const auto& idx = db.get_index_type<asset_index>().indices().get<by_symbol>();
