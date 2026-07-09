@@ -1949,4 +1949,51 @@ BOOST_FIXTURE_TEST_CASE( block_size_test, database_fixture )
    }
 }
 
+BOOST_AUTO_TEST_CASE( genesis_initializes_gold_feed )
+{
+   try
+   {
+      fc::temp_directory data_dir( graphene::utilities::temp_directory_path() );
+      constexpr double expected_initial_gold_feed_value = 107860.0 / 405217000000.0;
+
+      genesis_state_type genesis_state = make_genesis();
+      genesis_state_type::initial_asset_type gold;
+      gold.symbol = "GOLD";
+      gold.issuer_name = "init0";
+      gold.description = "Genesis GOLD";
+      gold.precision = GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS;
+      gold.max_supply = GRAPHENE_MAX_SHARE_SUPPLY;
+      gold.accumulated_fees = 0;
+      gold.is_bitasset = true;
+      genesis_state.initial_assets.push_back( gold );
+
+      database db;
+      db.open( data_dir.path(), [&genesis_state]() -> genesis_state_type
+      {
+         return genesis_state;
+      }, "TEST" );
+
+      BOOST_CHECK_EQUAL( db.head_block_num(), 0u );
+
+      const auto& asset_idx = db.get_index_type<asset_index>().indices().get<by_symbol>();
+      auto gold_itr = asset_idx.find( "GOLD" );
+      BOOST_REQUIRE( gold_itr != asset_idx.end() );
+
+      const auto& gold_asset = *gold_itr;
+      const auto& gold_bitasset = gold_asset.bitasset_data( db );
+
+      BOOST_REQUIRE( !gold_bitasset.current_feed.settlement_price.is_null() );
+      BOOST_CHECK_CLOSE_FRACTION( gold_bitasset.current_feed.settlement_price.to_real(),
+                                  expected_initial_gold_feed_value, 1e-12 );
+      BOOST_CHECK( gold_bitasset.current_feed.core_exchange_rate == gold_bitasset.current_feed.settlement_price );
+      BOOST_CHECK( gold_bitasset.median_feed.settlement_price == gold_bitasset.current_feed.settlement_price );
+      BOOST_CHECK( gold_bitasset.current_feed_publication_time == genesis_state.initial_timestamp );
+   }
+   catch (fc::exception& e)
+   {
+      edump((e.to_detail_string()));
+      throw;
+   }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

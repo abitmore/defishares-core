@@ -53,6 +53,14 @@ BOOST_FIXTURE_TEST_SUITE( bitasset_tests, database_fixture )
 namespace {
 
 constexpr uint32_t defishares_gold_feed_update_blocks = 9600;
+constexpr uint64_t defishares_initial_bts_price_usd_scaled = 107860ULL;
+constexpr uint64_t defishares_initial_gold_price_usd_scaled = 405217000000ULL;
+
+double expected_initial_gold_feed_value()
+{
+   return static_cast<double>( defishares_initial_bts_price_usd_scaled )
+          / static_cast<double>( defishares_initial_gold_price_usd_scaled );
+}
 
 uint32_t blocks_until_gold_feed_update( const database& db, const asset_object& gold )
 {
@@ -113,14 +121,16 @@ BOOST_AUTO_TEST_CASE( defishares_gold_feed_is_automatic )
    const double initial_gold_price = gold_bad.current_feed.settlement_price.to_real();
 
    BOOST_REQUIRE( !gold_bad.current_feed.settlement_price.is_null() );
-   BOOST_CHECK( gold_bad.current_feed.settlement_price == gold_id( db ).amount( 1 ) / asset( 1 ) );
+   BOOST_CHECK_CLOSE_FRACTION( gold_bad.current_feed.settlement_price.to_real(),
+                               expected_initial_gold_feed_value(), 1e-12 );
    BOOST_CHECK( gold_bad.current_feed.core_exchange_rate == gold_bad.current_feed.settlement_price );
 
    const uint32_t blocks_to_update = blocks_until_gold_feed_update( db, gold_id( db ) );
    BOOST_REQUIRE_GT( blocks_to_update, 0u );
 
    generate_blocks( blocks_to_update - 1 );
-   BOOST_CHECK( gold_id( db ).bitasset_data( db ).current_feed.settlement_price == gold_id( db ).amount( 1 ) / asset( 1 ) );
+   BOOST_CHECK_CLOSE_FRACTION( gold_id( db ).bitasset_data( db ).current_feed.settlement_price.to_real(),
+                               expected_initial_gold_feed_value(), 1e-12 );
 
    generate_block();
    const auto& updated_gold = gold_id( db );

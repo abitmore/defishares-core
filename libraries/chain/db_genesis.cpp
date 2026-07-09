@@ -31,6 +31,7 @@
 #include <graphene/chain/block_summary_object.hpp>
 #include <graphene/chain/chain_property_object.hpp>
 #include <graphene/chain/committee_member_object.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/fba_object.hpp>
 #include <graphene/chain/global_property_object.hpp>
 #include <graphene/chain/market_object.hpp>
@@ -492,6 +493,21 @@ void database::init_genesis(const genesis_state_type& genesis_state)
 
       modify( get(get(asset_id).dynamic_asset_data_id), [&total_supply]( asset_dynamic_data_object& asset_data ) {
          asset_data.current_supply = total_supply;
+      } );
+   }
+
+   vector<asset_bitasset_data_id_type> genesis_gold_bitassets;
+   const auto& bitasset_idx = get_index_type<asset_bitasset_data_index>().indices();
+   for( auto itr = bitasset_idx.begin(); itr != bitasset_idx.end(); ++itr )
+   {
+      if( defishares::is_gold_asset( itr->asset_id( *this ) ) )
+         genesis_gold_bitassets.push_back( itr->get_id() );
+   }
+
+   for( const auto& bitasset_id : genesis_gold_bitassets )
+   {
+      modify( get( bitasset_id ), [this]( asset_bitasset_data_object& bitasset ) {
+         defishares::apply_feed_policy( *this, bitasset );
       } );
    }
 
