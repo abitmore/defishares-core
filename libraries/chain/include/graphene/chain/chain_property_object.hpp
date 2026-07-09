@@ -36,6 +36,8 @@ class chain_property_object : public abstract_object<chain_property_object,
    public:
       chain_id_type chain_id;
       immutable_chain_parameters immutable_parameters;
+      uint64_t defishares_initial_bts_price_usd_scaled = 0;
+      uint64_t defishares_initial_gold_price_usd_scaled = 0;
 };
 
 } }

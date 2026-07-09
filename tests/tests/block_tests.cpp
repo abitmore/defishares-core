@@ -29,6 +29,7 @@
 
 #include <graphene/chain/account_object.hpp>
 #include <graphene/chain/asset_object.hpp>
+#include <graphene/chain/chain_property_object.hpp>
 #include <graphene/chain/committee_member_object.hpp>
 #include <graphene/chain/proposal_object.hpp>
 #include <graphene/chain/market_object.hpp>
@@ -1954,9 +1955,10 @@ BOOST_AUTO_TEST_CASE( genesis_initializes_gold_feed )
    try
    {
       fc::temp_directory data_dir( graphene::utilities::temp_directory_path() );
-      constexpr double expected_initial_gold_feed_value = 107860.0 / 405217000000.0;
 
       genesis_state_type genesis_state = make_genesis();
+      genesis_state.defishares_initial_bts_price_usd = "0.00250000";
+      genesis_state.defishares_initial_gold_price_usd = "2500.00000000";
       genesis_state_type::initial_asset_type gold;
       gold.symbol = "GOLD";
       gold.issuer_name = "init0";
@@ -1979,12 +1981,19 @@ BOOST_AUTO_TEST_CASE( genesis_initializes_gold_feed )
       auto gold_itr = asset_idx.find( "GOLD" );
       BOOST_REQUIRE( gold_itr != asset_idx.end() );
 
+      const double expected_initial_gold_feed_value =
+         static_cast<double>( genesis_state.get_defishares_initial_bts_price_usd_scaled() )
+         / static_cast<double>( genesis_state.get_defishares_initial_gold_price_usd_scaled() );
       const auto& gold_asset = *gold_itr;
       const auto& gold_bitasset = gold_asset.bitasset_data( db );
 
       BOOST_REQUIRE( !gold_bitasset.current_feed.settlement_price.is_null() );
       BOOST_CHECK_CLOSE_FRACTION( gold_bitasset.current_feed.settlement_price.to_real(),
                                   expected_initial_gold_feed_value, 1e-12 );
+      BOOST_CHECK_EQUAL( db.get_chain_properties().defishares_initial_bts_price_usd_scaled,
+                         genesis_state.get_defishares_initial_bts_price_usd_scaled() );
+      BOOST_CHECK_EQUAL( db.get_chain_properties().defishares_initial_gold_price_usd_scaled,
+                         genesis_state.get_defishares_initial_gold_price_usd_scaled() );
       BOOST_CHECK( gold_bitasset.current_feed.core_exchange_rate == gold_bitasset.current_feed.settlement_price );
       BOOST_CHECK( gold_bitasset.median_feed.settlement_price == gold_bitasset.current_feed.settlement_price );
       BOOST_CHECK( gold_bitasset.current_feed_publication_time == genesis_state.initial_timestamp );

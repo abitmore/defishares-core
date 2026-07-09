@@ -5,6 +5,7 @@
  */
 
 #include <graphene/chain/defishares_feed.hpp>
+#include <graphene/chain/chain_property_object.hpp>
 #include <graphene/chain/database.hpp>
 
 #include <boost/rational.hpp>
@@ -23,9 +24,6 @@ constexpr const char* DEFISHARES_GOLD_SYMBOL = "GOLD";
 // BitShares settlement_price direction is debt / collateral, so GOLD's feed is GOLD / BTS.
 // DefiShares inherits BTS as the genesis price anchor, but we store both BTS and GOLD using the
 // same fixed-point USD scale, then derive the on-chain GOLD / DFS feed from those integers.
-constexpr uint64_t DEFISHARES_USD_PRICE_SCALE = 100000000ULL; // 1e-8 USD
-constexpr uint64_t DEFISHARES_INITIAL_BTS_PRICE_USD_SCALED = 107860ULL; // 0.00107860 USD
-constexpr uint64_t DEFISHARES_INITIAL_GOLD_PRICE_USD_SCALED = 405217000000ULL; // 4052.17000000 USD
 constexpr uint32_t DEFISHARES_GOLD_FEED_UPDATE_BLOCKS = 9600;
 constexpr uint32_t DEFISHARES_BLOCKS_PER_YEAR = 28800 * 365;
 constexpr uint64_t DEFISHARES_FEED_FACTOR_SCALE = 1000000000ULL;
@@ -172,18 +170,20 @@ price calculate_gold_settlement_price( const database& db, const asset_object& g
    FC_ASSERT( is_gold_asset( gold_asset ), "DefiShares automatic GOLD feed can only be calculated for GOLD" );
 
    const asset_object& core_asset = asset_id_type()( db );
+   const chain_property_object& chain_properties = db.get_chain_properties();
+   const uint64_t initial_bts_price_usd_scaled = chain_properties.defishares_initial_bts_price_usd_scaled;
+   const uint64_t initial_gold_price_usd_scaled = chain_properties.defishares_initial_gold_price_usd_scaled;
    const uint64_t growth_factor = gold_feed_growth_factor_scaled( gold_feed_elapsed_blocks( db, gold_asset ) );
 
    const fc::uint128_t gold_amount = fc::uint128_t( asset::scaled_precision( gold_asset.precision ).value )
-                                     * DEFISHARES_INITIAL_BTS_PRICE_USD_SCALED
+                                     * initial_bts_price_usd_scaled
                                      * growth_factor;
    const fc::uint128_t core_amount = fc::uint128_t( asset::scaled_precision( core_asset.precision ).value )
-                                     * DEFISHARES_INITIAL_GOLD_PRICE_USD_SCALED
+                                     * initial_gold_price_usd_scaled
                                      * DEFISHARES_FEED_FACTOR_SCALE;
 
-   FC_ASSERT( DEFISHARES_INITIAL_BTS_PRICE_USD_SCALED > 0 );
-   FC_ASSERT( DEFISHARES_INITIAL_GOLD_PRICE_USD_SCALED > 0 );
-   FC_ASSERT( DEFISHARES_USD_PRICE_SCALE > 0 );
+   FC_ASSERT( initial_bts_price_usd_scaled > 0 );
+   FC_ASSERT( initial_gold_price_usd_scaled > 0 );
 
    return make_price_from_rational( gold_amount, core_amount, gold_asset.get_id(), core_asset.get_id() );
 }

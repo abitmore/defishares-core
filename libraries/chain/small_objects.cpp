@@ -89,6 +89,8 @@ FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::immutable_chain_parameters, BOO
 FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::chain_property_object, (graphene::db::object),
                     (chain_id)
                     (immutable_parameters)
+                    (defishares_initial_bts_price_usd_scaled)
+                    (defishares_initial_gold_price_usd_scaled)
                   )
 
 FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::committee_member_object, (graphene::db::object),

@@ -102,6 +102,8 @@ struct genesis_state_type {
 
    time_point_sec                           initial_timestamp;
    share_type                               max_core_supply = GRAPHENE_MAX_SHARE_SUPPLY;
+   string                                   defishares_initial_bts_price_usd = "0.00107860";
+   string                                   defishares_initial_gold_price_usd = "4052.17000000";
    chain_parameters                         initial_parameters;
    immutable_chain_parameters               immutable_parameters;
    vector<initial_account_type>             initial_accounts;
@@ -124,6 +126,9 @@ struct genesis_state_type {
     * This is the SHA256 serialization of the genesis_state.
     */
    chain_id_type compute_chain_id() const;
+
+   uint64_t get_defishares_initial_bts_price_usd_scaled() const;
+   uint64_t get_defishares_initial_gold_price_usd_scaled() const;
 
    /// Method to override initial witness signing keys for debug
    void override_witness_signing_keys( const std::string& new_key );

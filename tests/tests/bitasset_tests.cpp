@@ -53,13 +53,12 @@ BOOST_FIXTURE_TEST_SUITE( bitasset_tests, database_fixture )
 namespace {
 
 constexpr uint32_t defishares_gold_feed_update_blocks = 9600;
-constexpr uint64_t defishares_initial_bts_price_usd_scaled = 107860ULL;
-constexpr uint64_t defishares_initial_gold_price_usd_scaled = 405217000000ULL;
 
 double expected_initial_gold_feed_value()
 {
-   return static_cast<double>( defishares_initial_bts_price_usd_scaled )
-          / static_cast<double>( defishares_initial_gold_price_usd_scaled );
+   const genesis_state_type genesis_state;
+   return static_cast<double>( genesis_state.get_defishares_initial_bts_price_usd_scaled() )
+          / static_cast<double>( genesis_state.get_defishares_initial_gold_price_usd_scaled() );
 }
 
 uint32_t blocks_until_gold_feed_update( const database& db, const asset_object& gold )

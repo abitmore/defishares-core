@@ -56,6 +56,11 @@ void database::init_genesis(const genesis_state_type& genesis_state)
    FC_ASSERT(genesis_state.initial_active_witnesses <= genesis_state.initial_witness_candidates.size(),
              "initial_active_witnesses is larger than the number of candidate witnesses.");
 
+   const uint64_t defishares_initial_bts_price_usd_scaled =
+      genesis_state.get_defishares_initial_bts_price_usd_scaled();
+   const uint64_t defishares_initial_gold_price_usd_scaled =
+      genesis_state.get_defishares_initial_gold_price_usd_scaled();
+
    _undo_db.disable();
    struct auth_inhibitor {
       explicit auth_inhibitor(database& db) : db(db), old_flags(db.node_properties().skip_flags)
@@ -278,10 +283,14 @@ void database::init_genesis(const genesis_state_type& genesis_state)
    FC_ASSERT( (genesis_state.immutable_parameters.min_committee_member_count & 1) == 1,
               "min_committee_member_count must be odd" );
 
-   _p_chain_property_obj = & create<chain_property_object>([chain_id,&genesis_state](chain_property_object& p)
+   _p_chain_property_obj = & create<chain_property_object>(
+      [chain_id,&genesis_state,defishares_initial_bts_price_usd_scaled,
+       defishares_initial_gold_price_usd_scaled](chain_property_object& p)
    {
       p.chain_id = chain_id;
       p.immutable_parameters = genesis_state.immutable_parameters;
+      p.defishares_initial_bts_price_usd_scaled = defishares_initial_bts_price_usd_scaled;
+      p.defishares_initial_gold_price_usd_scaled = defishares_initial_gold_price_usd_scaled;
    } );
 
    constexpr uint32_t block_summary_object_count = 0x10000;
