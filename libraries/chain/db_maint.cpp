@@ -1303,7 +1303,7 @@ void database::perform_chain_maintenance( const signed_block& next_block )
             voting_stake[vid_worker] = stats.total_core_in_orders.value;
             voting_stake[vid_worker] += ( !hf2262_passed && stake_account.cashback_vb.valid() ) ?
                                              (*stake_account.cashback_vb)(d).balance.amount.value : 0;
-            voting_stake[vid_worker] += hf2262_passed ? 0 : stats.core_in_balance.value;
+            voting_stake[vid_worker] += stats.core_in_balance.value;
 
             // voting power stats
             uint64_t vp_all = 0;       ///<  all voting power.

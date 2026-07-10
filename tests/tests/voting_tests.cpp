@@ -786,19 +786,19 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
 
       BOOST_REQUIRE( HARDFORK_CORE_2262_PASSED( db.get_dynamic_global_properties().next_maintenance_time ) );
-      expected_votes[0] = 0; // 225 days
-      expected_votes[1] = 0; // 270 days
-      expected_votes[2] = 0; // 315 days
-      expected_votes[3] = 0; // 360 days
-      expected_votes[4] = 0; // 405 days
-      expected_votes[5] = 0; // 450 days
-      expected_votes[6] = 0; // 495 days
-      expected_votes[7] = 0; // 540 days
-      expected_votes[8] = 0; // 585 days
-      expected_votes[9] = 0; // 630 days
+      expected_votes[0] = 110; // 225 days
+      expected_votes[1] = 111; // 270 days
+      expected_votes[2] = 112; // 315 days
+      expected_votes[3] = 113 - 113 / 8; // 360 days
+      expected_votes[4] = 74 - 74 * 2 / 8; // 405 days
+      expected_votes[5] = 115 - 115 * 3 / 8; // 450 days
+      expected_votes[6] = 116 - 116 * 4 / 8; // 495 days
+      expected_votes[7] = 67 - 67 * 5 / 8; // 540 days
+      expected_votes[8] = 118 - 118 * 6 / 8 + 122; // 585 days
+      expected_votes[9] = 119 - 119 * 7 / 8; // 630 days
       expected_votes[10] = 0; // 675 days
       expected_votes[11] = 0; // 720 days
-      expected_votes[12] = 0; // 60 days
+      expected_votes[12] = 122; // 60 days
       expected_votes[13] = 0; // 810 days
 
       for( size_t i = 0; i < total; ++i )
@@ -806,19 +806,38 @@ BOOST_AUTO_TEST_CASE( witness_votes_calculation )
          BOOST_CHECK_EQUAL( wit_ids[i](db).total_votes, expected_votes[i] );
       }
 
-      expected_active_witnesses = original_wits;
+      expected_active_witnesses = { wit_ids[0], wit_ids[1], wit_ids[2],
+                                    wit_ids[3], wit_ids[4], wit_ids[5],
+                                    wit_ids[6], wit_ids[8], wit_ids[12] };
       BOOST_CHECK( db.get_global_properties().active_witnesses == expected_active_witnesses );
 
       // some days passed
       generate_blocks( tick_start_time + fc::days(60+180) );
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
 
+      expected_votes[0] = 110 - 110 * 2 / 8; // 405 days
+      expected_votes[1] = 111 - 111 * 3 / 8; // 450 days
+      expected_votes[2] = 112 - 112 * 4 / 8; // 495 days
+      expected_votes[3] = 113 - 113 * 5 / 8; // 540 days
+      expected_votes[4] = 74 - 74 * 6 / 8; // 585 days
+      expected_votes[5] = 115 - 115 * 7 / 8; // 630 days
+      expected_votes[6] = 0; // 675 days
+      expected_votes[7] = 0; // 720 days
+      expected_votes[8] = 122; // 765 days plus 240-day-old new vote
+      expected_votes[9] = 0; // 810 days
+      expected_votes[10] = 0; // 855 days
+      expected_votes[11] = 0; // 900 days
+      expected_votes[12] = 122; // 240 days
+      expected_votes[13] = 0; // 990 days
+
       for( size_t i = 0; i < total; ++i )
       {
          BOOST_CHECK_EQUAL( wit_ids[i](db).total_votes, expected_votes[i] );
       }
 
-      expected_active_witnesses = original_wits;
+      expected_active_witnesses = { *original_wits.begin(), wit_ids[0], wit_ids[1],
+                                    wit_ids[2], wit_ids[3], wit_ids[4],
+                                    wit_ids[5], wit_ids[8], wit_ids[12] };
       BOOST_CHECK( db.get_global_properties().active_witnesses == expected_active_witnesses );
 
    } FC_LOG_AND_RETHROW()
@@ -961,7 +980,7 @@ BOOST_AUTO_TEST_CASE( committee_votes_calculation )
    } FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE( debt_collateral_counts_for_votes_but_tickets_do_not )
+BOOST_AUTO_TEST_CASE( core_balance_and_debt_collateral_count_for_votes_but_tickets_do_not )
 {
    try
    {
@@ -1009,19 +1028,19 @@ BOOST_AUTO_TEST_CASE( debt_collateral_counts_for_votes_but_tickets_do_not )
       }
 
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
-      BOOST_CHECK_EQUAL( get_candidate_votes(), 0u );
+      BOOST_CHECK_EQUAL( get_candidate_votes(), 500u );
 
       const call_order_object* call_ptr = borrow( borrower, testbit.amount( 100 ), asset( 200 ) );
       BOOST_REQUIRE( call_ptr != nullptr );
 
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
-      BOOST_CHECK_EQUAL( get_candidate_votes(), 200u );
+      BOOST_CHECK_EQUAL( get_candidate_votes(), 500u );
 
       create_ticket( borrower_id, lock_forever, asset( 50 ) );
       create_ticket( borrower_id, lock_720_days, asset( 25 ) );
 
       generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
-      BOOST_CHECK_EQUAL( get_candidate_votes(), 200u );
+      BOOST_CHECK_EQUAL( get_candidate_votes(), 425u );
    }
    FC_LOG_AND_RETHROW()
 }
