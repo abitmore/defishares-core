@@ -37,8 +37,12 @@ bool accepts_gold_quote_feed( const database& db,
 
 price calculate_gold_settlement_price( const database& db, const asset_object& gold_asset );
 
+share_type calculate_gold_debt_for_cr( share_type dfs_collateral,
+                                       const price& gold_per_dfs,
+                                       uint16_t collateral_ratio );
+
 void apply_feed_policy( const database& db, asset_bitasset_data_object& bitasset );
 
-void refresh_scheduled_feeds( database& db );
+bool refresh_scheduled_feeds( database& db );
 
 } } } // graphene::chain::defishares

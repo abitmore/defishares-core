@@ -36,6 +36,7 @@ namespace graphene { namespace chain {
          uint64_t         last_aslot = 0;
          public_key_type  signing_key;
          optional< vesting_balance_id_type > pay_vb;
+         optional< vesting_balance_id_type > gold_pay_vb;
          vote_id_type     vote_id { vote_id_type::witness };
          uint64_t         total_votes = 0;
          string           url;

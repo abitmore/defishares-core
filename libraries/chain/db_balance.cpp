@@ -160,7 +160,18 @@ optional< vesting_balance_id_type > database::deposit_lazy_vesting(
    account_id_type req_owner,
    bool require_vesting )
 {
-   if( amount == 0 )
+   return deposit_lazy_vesting( ovbid, asset( amount ), req_vesting_seconds,
+                                balance_type, req_owner, require_vesting );
+}
+
+optional< vesting_balance_id_type > database::deposit_lazy_vesting(
+   const optional< vesting_balance_id_type >& ovbid,
+   const asset& amount, uint32_t req_vesting_seconds,
+   vesting_balance_type balance_type,
+   account_id_type req_owner,
+   bool require_vesting )
+{
+   if( amount.amount == 0 )
       return optional< vesting_balance_id_type >();
 
    fc::time_point_sec now = head_block_time();
@@ -169,7 +180,8 @@ optional< vesting_balance_id_type > database::deposit_lazy_vesting(
    {
       const vesting_balance_object& vbo = (*ovbid)(*this);
       if( vbo.owner == req_owner && vbo.policy.is_type< cdd_vesting_policy >()
-            && vbo.policy.get< cdd_vesting_policy >().vesting_seconds == req_vesting_seconds )
+            && vbo.policy.get< cdd_vesting_policy >().vesting_seconds == req_vesting_seconds
+            && vbo.balance.asset_id == amount.asset_id )
       {
          modify( vbo, [require_vesting, &now, &amount]( vesting_balance_object& _vbo )
          {
@@ -184,7 +196,7 @@ optional< vesting_balance_id_type > database::deposit_lazy_vesting(
 
    cdd_vesting_policy policy;
    policy.vesting_seconds = req_vesting_seconds;
-   policy.coin_seconds_earned = require_vesting ? 0 : amount.value * policy.vesting_seconds;
+   policy.coin_seconds_earned = require_vesting ? 0 : amount.amount.value * policy.vesting_seconds;
    policy.coin_seconds_earned_last_update = now;
 
    const vesting_balance_object& vbo = create< vesting_balance_object >(
@@ -268,6 +280,28 @@ void database::deposit_witness_pay(const witness_object& wit, share_type amount)
    }
 
    return;
+}
+
+void database::deposit_gold_witness_pay(const witness_object& wit, const asset& amount)
+{
+   if( amount.amount == 0 )
+      return;
+
+   optional< vesting_balance_id_type > new_vbid = deposit_lazy_vesting(
+      wit.gold_pay_vb,
+      amount,
+      get_global_properties().parameters.witness_pay_vesting_seconds,
+      vesting_balance_type::witness,
+      wit.witness_account,
+      true );
+
+   if( new_vbid.valid() )
+   {
+      modify( wit, [&new_vbid]( witness_object& mutable_witness )
+      {
+         mutable_witness.gold_pay_vb = *new_vbid;
+      } );
+   }
 }
 
 } }

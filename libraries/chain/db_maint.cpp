@@ -36,9 +36,11 @@
 #include <graphene/chain/budget_record_object.hpp>
 #include <graphene/chain/buyback_object.hpp>
 #include <graphene/chain/chain_property_object.hpp>
+#include <graphene/chain/defishares_feed.hpp>
 #include <graphene/chain/committee_member_object.hpp>
 #include <graphene/chain/fba_object.hpp>
 #include <graphene/chain/global_property_object.hpp>
+#include <graphene/chain/gold_reserve_vault_object.hpp>
 #include <graphene/chain/market_object.hpp>
 #include <graphene/chain/special_authority_object.hpp>
 #include <graphene/chain/ticket_object.hpp>
@@ -197,6 +199,95 @@ void database::pay_workers( share_type& budget )
       });
 
       budget -= actual_pay;
+   }
+}
+
+void database::pay_workers_from_gold_reserve()
+{
+   const asset_object* gold = defishares::find_gold_asset( *this );
+   if( !gold )
+      return;
+
+   const auto head_time = head_block_time();
+   vector<std::reference_wrapper<const worker_object>> active_workers;
+   get_index_type<worker_index>().inspect_all_objects([head_time, &active_workers](const object& o) {
+      const worker_object& worker = static_cast<const worker_object&>(o);
+      if( worker.is_active(head_time) && worker.approving_stake() > 0 )
+         active_workers.emplace_back(worker);
+   });
+   std::sort(active_workers.begin(), active_workers.end(), [](const worker_object& a, const worker_object& b) {
+      if( a.approving_stake() != b.approving_stake() )
+         return a.approving_stake() > b.approving_stake();
+      return a.id < b.id;
+   });
+
+   const auto passed_time = head_time - get_dynamic_global_properties().last_budget_time;
+   for( const worker_object& worker : active_workers )
+   {
+      // Legacy workers remain readable and their DFS budget remains a
+      // historical field, but they are not eligible for GOLD reserve pay.
+      if( !worker.gold_daily_pay.valid() )
+         continue;
+
+      fc::uint128_t requested = worker.gold_daily_pay->value;
+      requested *= uint64_t( passed_time.count() );
+      requested /= fc::days( 1 ).count();
+      if( requested == 0 || requested > fc::uint128_t( GRAPHENE_MAX_SHARE_SUPPLY ) )
+         continue;
+      const share_type available = available_gold_reserve_spending();
+      const share_type reward_amount = std::min(
+         share_type( static_cast<uint64_t>( requested ) ), available );
+      if( reward_amount <= 0 )
+         break;
+      const asset reward( reward_amount, gold->get_id() );
+
+      switch( worker.worker.which() )
+      {
+         case 1: // vesting_balance_worker_type
+         {
+            if( !spend_gold_reserve( reward.amount ) )
+               break;
+
+            const vesting_balance_worker_type& worker_type = worker.worker.get<vesting_balance_worker_type>();
+            if( worker.gold_pay_vb.valid() )
+            {
+               const vesting_balance_object& vbo = (*worker.gold_pay_vb)( *this );
+               FC_ASSERT( vbo.owner == worker.worker_account && vbo.balance.asset_id == reward.asset_id,
+                          "Invalid GOLD worker vesting balance" );
+               modify( vbo, [this, &reward]( vesting_balance_object& mutable_vbo )
+               {
+                  mutable_vbo.deposit( head_block_time(), reward );
+               } );
+            }
+            else
+            {
+               const vesting_balance_object& core_vbo = worker_type.balance( *this );
+               const vesting_balance_object& gold_vbo = create<vesting_balance_object>(
+                  [&worker, &reward, &core_vbo]( vesting_balance_object& new_vbo )
+               {
+                  new_vbo.owner = worker.worker_account;
+                  new_vbo.balance = reward;
+                  new_vbo.balance_type = vesting_balance_type::worker;
+                  new_vbo.policy = core_vbo.policy;
+               } );
+               modify( worker, [&gold_vbo]( worker_object& mutable_worker )
+               {
+                  mutable_worker.gold_pay_vb = gold_vbo.id;
+               } );
+            }
+            break;
+         }
+         case 2: // burn_worker_type
+            if( spend_gold_reserve( reward.amount ) )
+            {
+               adjust_balance( GRAPHENE_NULL_ACCOUNT, reward );
+            }
+            break;
+         default: // refund_worker_type consumes its budget and returns no GOLD.
+            // This mirrors refund_worker_type::pay_worker(): the worker still
+            // claims its scheduled budget, but no spend leaves the treasury.
+            break;
+      }
    }
 }
 
@@ -421,6 +512,17 @@ void database::initialize_budget_record( fc::time_point_sec now, budget_record& 
    const asset_dynamic_data_object& core_dd = get_core_dynamic_data();
 
    rec.from_initial_reserve = core.reserved(*this);
+   if( HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED( now ) )
+   {
+      const gold_reserve_vault_object* vault = find_gold_reserve_vault();
+      if( vault && vault->enabled )
+      {
+         // Core reserve can fall between feed rebalances. Only the currently
+         // available amount can be excluded from the legacy DFS budget.
+         rec.from_initial_reserve = rec.from_initial_reserve > vault->dfs_locked_collateral
+            ? rec.from_initial_reserve - vault->dfs_locked_collateral : share_type();
+      }
+   }
    rec.from_accumulated_fees = core_dd.accumulated_fees;
    rec.from_unused_witness_budget = dpo.witness_budget;
    rec.max_supply = core.options.max_supply;
@@ -496,28 +598,37 @@ void database::process_budget()
       budget_record rec;
       initialize_budget_record( now, rec );
       share_type available_funds = rec.total_budget;
+      const bool pay_protocol_rewards_in_gold =
+         HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED( now );
 
-      share_type witness_budget = gpo.parameters.witness_pay_per_block.value * blocks_to_maint;
+      share_type witness_budget = pay_protocol_rewards_in_gold
+         ? share_type() : gpo.parameters.witness_pay_per_block.value * blocks_to_maint;
       rec.requested_witness_budget = witness_budget;
       witness_budget = std::min(witness_budget, available_funds);
       rec.witness_budget = witness_budget;
       available_funds -= witness_budget;
 
-      fc::uint128_t worker_budget_u128 = gpo.parameters.worker_budget_per_day.value;
-      worker_budget_u128 *= uint64_t(time_to_maint);
-      constexpr uint64_t seconds_per_day = 86400;
-      worker_budget_u128 /= seconds_per_day;
+      share_type worker_budget = 0;
+      if( !pay_protocol_rewards_in_gold )
+      {
+         fc::uint128_t worker_budget_u128 = gpo.parameters.worker_budget_per_day.value;
+         worker_budget_u128 *= uint64_t(time_to_maint);
+         constexpr uint64_t seconds_per_day = 86400;
+         worker_budget_u128 /= seconds_per_day;
 
-      share_type worker_budget;
-      if( worker_budget_u128 >= static_cast<fc::uint128_t>(available_funds.value) )
-         worker_budget = available_funds;
-      else
-         worker_budget = static_cast<uint64_t>(worker_budget_u128);
+         if( worker_budget_u128 >= static_cast<fc::uint128_t>(available_funds.value) )
+            worker_budget = available_funds;
+         else
+            worker_budget = static_cast<uint64_t>(worker_budget_u128);
+      }
       rec.worker_budget = worker_budget;
       available_funds -= worker_budget;
 
       share_type leftover_worker_funds = worker_budget;
-      pay_workers(leftover_worker_funds);
+      if( pay_protocol_rewards_in_gold )
+         pay_workers_from_gold_reserve();
+      else
+         pay_workers(leftover_worker_funds);
       rec.leftover_worker_funds = leftover_worker_funds;
       available_funds += leftover_worker_funds;
 

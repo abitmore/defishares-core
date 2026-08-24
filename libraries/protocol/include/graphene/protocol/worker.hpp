@@ -93,6 +93,29 @@ namespace graphene { namespace protocol {
       account_id_type   fee_payer()const { return owner; }
       void              validate()const;
    };
+
+   /**
+    * @brief Create a worker whose daily budget is denominated directly in GOLD.
+    *
+    * This operation is appended to the operation variant so existing operation
+    * IDs remain stable. The chain evaluator validates the GOLD asset ID.
+    */
+   struct worker_create_gold_operation : public base_operation
+   {
+      struct fee_params_t { uint64_t fee = 5000*GRAPHENE_BLOCKCHAIN_PRECISION; };
+
+      asset                fee;
+      account_id_type      owner;
+      time_point_sec       work_begin_date;
+      time_point_sec       work_end_date;
+      asset                gold_daily_pay;
+      string               name;
+      string               url;
+      worker_initializer   initializer;
+
+      account_id_type fee_payer()const { return owner; }
+      void validate()const;
+   };
    ///@}
 
 } }
@@ -106,5 +129,11 @@ FC_REFLECT( graphene::protocol::worker_create_operation::fee_params_t, (fee) )
 FC_REFLECT( graphene::protocol::worker_create_operation,
             (fee)(owner)(work_begin_date)(work_end_date)(daily_pay)(name)(url)(initializer) )
 
+FC_REFLECT( graphene::protocol::worker_create_gold_operation::fee_params_t, (fee) )
+FC_REFLECT( graphene::protocol::worker_create_gold_operation,
+            (fee)(owner)(work_begin_date)(work_end_date)(gold_daily_pay)(name)(url)(initializer) )
+
 GRAPHENE_DECLARE_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_operation::fee_params_t )
 GRAPHENE_DECLARE_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_operation )
+GRAPHENE_DECLARE_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_gold_operation::fee_params_t )
+GRAPHENE_DECLARE_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_gold_operation )

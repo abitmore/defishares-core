@@ -946,6 +946,20 @@ signed_transaction wallet_api::create_worker(
       daily_pay, name, url, worker_settings, broadcast );
 }
 
+signed_transaction wallet_api::create_gold_worker(
+   const string& owner_account,
+   const time_point_sec& work_begin_date,
+   const time_point_sec& work_end_date,
+   const asset& gold_daily_pay,
+   const string& name,
+   const string& url,
+   const variant& worker_settings,
+   bool broadcast /* = false */ )const
+{
+   return my->create_gold_worker( owner_account, work_begin_date, work_end_date,
+      gold_daily_pay, name, url, worker_settings, broadcast );
+}
+
 signed_transaction wallet_api::update_worker_votes(
    const string& owner_account,
    const worker_vote_delta& delta,

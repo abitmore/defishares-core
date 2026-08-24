@@ -279,6 +279,38 @@ namespace graphene { namespace wallet { namespace detail {
       return sign_transaction( tx, broadcast );
    }
 
+   signed_transaction wallet_api_impl::create_gold_worker( string owner_account, time_point_sec work_begin_date,
+         time_point_sec work_end_date, asset gold_daily_pay, string name, string url,
+         variant worker_settings, bool broadcast)
+   {
+      worker_initializer init;
+      std::string wtype = worker_settings["type"].get_string();
+
+      if( wtype == "burn" )
+         init = _create_worker_initializer< burn_worker_initializer >( worker_settings );
+      else if( wtype == "refund" )
+         init = _create_worker_initializer< refund_worker_initializer >( worker_settings );
+      else if( wtype == "vesting" )
+         init = _create_worker_initializer< vesting_balance_worker_initializer >( worker_settings );
+      else
+         FC_ASSERT( false, "unknown worker[\"type\"] value" );
+
+      worker_create_gold_operation op;
+      op.owner = get_account( owner_account ).id;
+      op.work_begin_date = work_begin_date;
+      op.work_end_date = work_end_date;
+      op.gold_daily_pay = gold_daily_pay;
+      op.name = name;
+      op.url = url;
+      op.initializer = init;
+
+      signed_transaction tx;
+      tx.operations.push_back( op );
+      set_operation_fees( tx, _remote_db->get_global_properties().parameters.get_current_fees() );
+      tx.validate();
+      return sign_transaction( tx, broadcast );
+   }
+
    signed_transaction wallet_api_impl::vote_for_committee_member(string voting_account,
          string committee_member, bool approve, bool broadcast )
    { try {
