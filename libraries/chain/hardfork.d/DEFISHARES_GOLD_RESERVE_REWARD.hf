@@ -1,5 +1,5 @@
 // DefiShares protocol-owned GOLD reserve and GOLD-denominated protocol rewards.
 #ifndef HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_TIME
-#define HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_TIME (fc::time_point_sec( 1787536800 )) // Monday, August 24, 2026 02:00:00 UTC / 10:00:00 CST
+#define HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_TIME (fc::time_point_sec( 1787542800 )) // Monday, August 24, 2026 03:40:00 UTC / 11:40:00 CST
 #define HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED(head_block_time) (head_block_time >= HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_TIME)
 #endif
