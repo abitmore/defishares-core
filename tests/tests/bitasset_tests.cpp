@@ -217,10 +217,13 @@ BOOST_AUTO_TEST_CASE( defishares_gold_reserve_pays_vesting_workers_from_internal
    trx.clear();
    set_expiration( db, trx );
    ACTOR( workerowner );
+   ACTOR( legacyworkerowner );
    upgrade_to_lifetime_member( workerowner_id );
-   worker_create_operation create_worker_op;
+   upgrade_to_lifetime_member( legacyworkerowner_id );
+
+   worker_create_gold_operation create_worker_op;
    create_worker_op.owner = workerowner_id;
-   create_worker_op.daily_pay = share_type( 100000000LL );
+   create_worker_op.gold_daily_pay = asset( share_type( 1000LL ), gold_id );
    create_worker_op.work_begin_date = db.head_block_time();
    create_worker_op.work_end_date = db.head_block_time() + fc::days( 2 );
    create_worker_op.initializer = vesting_balance_worker_initializer( 1 );
@@ -233,26 +236,67 @@ BOOST_AUTO_TEST_CASE( defishares_gold_reserve_pays_vesting_workers_from_internal
    const worker_object& worker = db.get<worker_object>(
       result.operation_results[0].get<object_id_type>() );
    fund( workerowner, asset( 1000000 ) );
-   account_update_operation vote_for_worker;
-   vote_for_worker.account = workerowner_id;
-   vote_for_worker.new_options = workerowner.options;
-   vote_for_worker.new_options->votes.insert( worker.vote_for );
+   worker_create_operation create_legacy_worker_op;
+   create_legacy_worker_op.owner = legacyworkerowner_id;
+   create_legacy_worker_op.daily_pay = share_type( 100000000LL );
+   create_legacy_worker_op.work_begin_date = db.head_block_time();
+   create_legacy_worker_op.work_end_date = db.head_block_time() + fc::days( 2 );
+   create_legacy_worker_op.initializer = burn_worker_initializer();
    trx.clear();
-   set_expiration( db, trx );
-   trx.operations.push_back( vote_for_worker );
+   trx.operations.push_back( create_legacy_worker_op );
    trx.validate();
-   PUSH_TX( db, trx, ~0 );
+   const processed_transaction legacy_result = PUSH_TX( db, trx, ~0 );
    trx.clear();
+   const worker_object& legacy_worker = db.get<worker_object>(
+      legacy_result.operation_results[0].get<object_id_type>() );
+   fund( legacyworkerowner, asset( 1000000 ) );
+
+   db.modify( worker, []( worker_object& mutable_worker )
+   {
+      mutable_worker.total_votes_for = 1;
+   } );
+   db.modify( legacy_worker, []( worker_object& mutable_worker )
+   {
+      mutable_worker.total_votes_for = 1;
+   } );
 
    const share_type pool_before = db.find_gold_reserve_vault()->gold_pool_balance;
-   generate_blocks( db.get_dynamic_global_properties().next_maintenance_time );
+   BOOST_REQUIRE( db.get<worker_object>( worker.id ).gold_daily_pay.valid() );
+   BOOST_CHECK_EQUAL( db.get<worker_object>( worker.id ).worker.which(), 1 );
+   db.modify( db.get_dynamic_global_properties(), [this]( dynamic_global_property_object& dpo )
+   {
+      dpo.last_budget_time = db.head_block_time() - fc::hours( 1 );
+   } );
+   db.pay_workers_from_gold_reserve();
 
    const worker_object& paid_worker = db.get<worker_object>( worker.id );
+   BOOST_REQUIRE_GT( paid_worker.approving_stake().value, 0 );
    BOOST_REQUIRE( paid_worker.gold_pay_vb.valid() );
-   const vesting_balance_object& gold_vbo = (*paid_worker.gold_pay_vb)( db );
+   const vesting_balance_id_type gold_pay_vb = *paid_worker.gold_pay_vb;
+   const vesting_balance_object& gold_vbo = gold_pay_vb( db );
+   fc::uint128_t expected_reward = 1000;
+   expected_reward *= uint64_t( fc::hours( 1 ).count() );
+   expected_reward /= fc::days( 1 ).count();
    BOOST_CHECK( gold_vbo.balance.asset_id == gold_id );
-   BOOST_CHECK_GT( gold_vbo.balance.amount.value, 0 );
+   BOOST_CHECK_EQUAL( gold_vbo.balance.amount.value, static_cast<uint64_t>( expected_reward ) );
+   const share_type first_reward = gold_vbo.balance.amount;
    BOOST_CHECK_LT( db.find_gold_reserve_vault()->gold_pool_balance.value, pool_before.value );
+   BOOST_CHECK( !db.get<worker_object>( legacy_worker.id ).gold_pay_vb.valid() );
+
+   const share_type remaining_daily_budget = db.available_gold_reserve_spending();
+   BOOST_REQUIRE_GT( remaining_daily_budget.value, 0 );
+   db.modify( paid_worker, []( worker_object& mutable_worker )
+   {
+      mutable_worker.gold_daily_pay = share_type( 100000000 );
+   } );
+   db.modify( db.get_dynamic_global_properties(), [this]( dynamic_global_property_object& dpo )
+   {
+      dpo.last_budget_time = db.head_block_time() - fc::hours( 1 );
+   } );
+   db.pay_workers_from_gold_reserve();
+   BOOST_CHECK_EQUAL( gold_pay_vb( db ).balance.amount.value,
+                      ( first_reward + remaining_daily_budget ).value );
+   BOOST_CHECK_EQUAL( db.available_gold_reserve_spending().value, 0 );
    BOOST_CHECK_EQUAL( gold_id( db ).dynamic_data( db ).current_supply.value,
                       db.find_gold_reserve_vault()->gold_debt.value );
 } FC_LOG_AND_RETHROW() }

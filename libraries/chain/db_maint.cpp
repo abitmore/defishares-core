@@ -208,11 +208,6 @@ void database::pay_workers_from_gold_reserve()
    if( !gold )
       return;
 
-   const price& gold_per_dfs = gold->bitasset_data( *this ).current_feed.settlement_price;
-   if( gold_per_dfs.is_null() || gold_per_dfs.base.asset_id != gold->get_id()
-       || gold_per_dfs.quote.asset_id != asset_id_type() )
-      return;
-
    const auto head_time = head_block_time();
    vector<std::reference_wrapper<const worker_object>> active_workers;
    get_index_type<worker_index>().inspect_all_objects([head_time, &active_workers](const object& o) {
@@ -227,31 +222,25 @@ void database::pay_workers_from_gold_reserve()
    });
 
    const auto passed_time = head_time - get_dynamic_global_properties().last_budget_time;
-   fc::uint128_t total_budget = get_global_properties().parameters.worker_budget_per_day.value;
-   total_budget *= uint64_t( passed_time.count() );
-   total_budget /= fc::days( 1 ).count();
-   share_type remaining_budget = total_budget >= fc::uint128_t( GRAPHENE_MAX_SHARE_SUPPLY )
-      ? share_type( GRAPHENE_MAX_SHARE_SUPPLY ) : share_type( static_cast<uint64_t>( total_budget ) );
-
    for( const worker_object& worker : active_workers )
    {
-      if( remaining_budget <= 0 )
-         break;
+      // Legacy workers remain readable and their DFS budget remains a
+      // historical field, but they are not eligible for GOLD reserve pay.
+      if( !worker.gold_daily_pay.valid() )
+         continue;
 
-      fc::uint128_t requested = worker.daily_pay.value;
+      fc::uint128_t requested = worker.gold_daily_pay->value;
       requested *= uint64_t( passed_time.count() );
       requested /= fc::days( 1 ).count();
-      share_type core_pay = std::min( remaining_budget, share_type( static_cast<uint64_t>( requested ) ) );
-      if( core_pay <= 0 )
+      if( requested == 0 || requested > fc::uint128_t( GRAPHENE_MAX_SHARE_SUPPLY ) )
          continue;
+      const share_type available = available_gold_reserve_spending();
+      const share_type reward_amount = std::min(
+         share_type( static_cast<uint64_t>( requested ) ), available );
+      if( reward_amount <= 0 )
+         break;
+      const asset reward( reward_amount, gold->get_id() );
 
-      fc::uint128_t gold_pay = fc::uint128_t( core_pay.value ) * gold_per_dfs.base.amount.value;
-      gold_pay /= gold_per_dfs.quote.amount.value;
-      if( gold_pay == 0 || gold_pay > fc::uint128_t( GRAPHENE_MAX_SHARE_SUPPLY ) )
-         continue;
-      const asset reward( share_type( static_cast<uint64_t>( gold_pay ) ), gold->get_id() );
-
-      bool paid = false;
       switch( worker.worker.which() )
       {
          case 1: // vesting_balance_worker_type
@@ -286,25 +275,19 @@ void database::pay_workers_from_gold_reserve()
                   mutable_worker.gold_pay_vb = gold_vbo.id;
                } );
             }
-            paid = true;
             break;
          }
          case 2: // burn_worker_type
             if( spend_gold_reserve( reward.amount ) )
             {
                adjust_balance( GRAPHENE_NULL_ACCOUNT, reward );
-               paid = true;
             }
             break;
          default: // refund_worker_type consumes its budget and returns no GOLD.
             // This mirrors refund_worker_type::pay_worker(): the worker still
             // claims its scheduled budget, but no spend leaves the treasury.
-            paid = true;
             break;
       }
-
-      if( paid )
-         remaining_budget -= core_pay;
    }
 }
 
@@ -625,7 +608,7 @@ void database::process_budget()
       rec.witness_budget = witness_budget;
       available_funds -= witness_budget;
 
-      share_type worker_budget;
+      share_type worker_budget = 0;
       if( !pay_protocol_rewards_in_gold )
       {
          fc::uint128_t worker_budget_u128 = gpo.parameters.worker_budget_per_day.value;

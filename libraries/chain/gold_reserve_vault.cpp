@@ -117,6 +117,24 @@ void database::rebalance_gold_reserve_vault()
    } );
 }
 
+share_type database::available_gold_reserve_spending()const
+{
+   const gold_reserve_vault_object* vault = find_gold_reserve_vault();
+   if( !vault || !vault->enabled || vault->issuance_paused || vault->emergency_mode )
+      return share_type();
+
+   const uint32_t today = budget_day( head_block_time() );
+   const bool new_day = vault->last_budget_day != today;
+   const share_type daily_limit = new_day
+      ? vault->gold_pool_balance / vault->daily_spending_divisor
+      : vault->gold_daily_spending_limit;
+   const share_type spent_today = new_day ? share_type() : vault->gold_spent_today;
+   if( spent_today >= daily_limit )
+      return share_type();
+
+   return std::min( vault->gold_pool_balance, daily_limit - spent_today );
+}
+
 bool database::spend_gold_reserve( share_type amount )
 {
    FC_ASSERT( amount >= 0, "Cannot spend a negative GOLD amount" );

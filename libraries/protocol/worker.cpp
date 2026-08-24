@@ -37,7 +37,19 @@ void worker_create_operation::validate() const
    FC_ASSERT(url.size() < GRAPHENE_MAX_URL_LENGTH );
 }
 
+void worker_create_gold_operation::validate() const
+{
+   FC_ASSERT(fee.amount >= 0);
+   FC_ASSERT(work_end_date > work_begin_date);
+   FC_ASSERT(gold_daily_pay.amount > 0);
+   FC_ASSERT(gold_daily_pay.amount < GRAPHENE_MAX_SHARE_SUPPLY);
+   FC_ASSERT(name.size() < GRAPHENE_MAX_WORKER_NAME_LENGTH );
+   FC_ASSERT(url.size() < GRAPHENE_MAX_URL_LENGTH );
+}
+
 } }
 
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_operation::fee_params_t )
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_operation )
+GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_gold_operation::fee_params_t )
+GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::protocol::worker_create_gold_operation )

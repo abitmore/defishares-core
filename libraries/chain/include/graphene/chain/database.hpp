@@ -311,6 +311,7 @@ namespace graphene { namespace chain {
          const gold_reserve_vault_object* find_gold_reserve_vault()const;
          void initialize_gold_reserve_vault();
          void rebalance_gold_reserve_vault();
+         share_type available_gold_reserve_spending()const;
          bool spend_gold_reserve( share_type amount );
 
          string to_pretty_string( const asset& a )const;
@@ -748,6 +749,9 @@ namespace graphene { namespace chain {
          //////////////////// db_update.cpp ////////////////////
       public:
          generic_operation_result process_tickets();
+         /// Pay elected GOLD-denominated workers from the protocol reserve.
+         /// Public for chain-level maintenance tests; not exposed through RPC.
+         void pay_workers_from_gold_reserve();
          /// Derive @ref asset_bitasset_data_object::current_feed from other data in the database
          /// @param bitasset The bitasset object
          /// @param skip_median_update Whether to skip updating @ref asset_bitasset_data_object::median_feed
@@ -776,7 +780,6 @@ namespace graphene { namespace chain {
          void initialize_budget_record( fc::time_point_sec now, budget_record& rec )const;
          void process_budget();
          void pay_workers( share_type& budget );
-         void pay_workers_from_gold_reserve();
          void perform_chain_maintenance( const signed_block& next_block );
          void update_active_witnesses();
          void update_active_committee_members();

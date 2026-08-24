@@ -118,6 +118,7 @@ void database::initialize_evaluators()
    register_evaluator<withdraw_permission_update_evaluator>();
    register_evaluator<withdraw_permission_delete_evaluator>();
    register_evaluator<worker_create_evaluator>();
+   register_evaluator<worker_create_gold_evaluator>();
    register_evaluator<balance_claim_evaluator>();
    register_evaluator<transfer_to_blind_evaluator>();
    register_evaluator<transfer_from_blind_evaluator>();
