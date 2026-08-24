@@ -117,6 +117,8 @@ class worker_object : public abstract_object<worker_object, protocol_ids, worker
       share_type daily_pay;
       /// ID of this worker's pay balance
       worker_type worker;
+      /// GOLD payment balance used by the DefiShares reserve-reward hardfork.
+      optional<vesting_balance_id_type> gold_pay_vb;
       /// Human-readable name for the worker
       string name;
       /// URL to a web page representing this worker

@@ -205,6 +205,27 @@ price calculate_gold_settlement_price( const database& db, const asset_object& g
    return make_price_from_rational( gold_amount, core_amount, gold_asset.get_id(), core_asset.get_id() );
 }
 
+share_type calculate_gold_debt_for_cr( share_type dfs_collateral,
+                                       const price& gold_per_dfs,
+                                       uint16_t collateral_ratio )
+{
+   FC_ASSERT( dfs_collateral >= 0 );
+   FC_ASSERT( collateral_ratio >= GRAPHENE_COLLATERAL_RATIO_DENOM,
+              "Collateral ratio must be at least 1.0" );
+   FC_ASSERT( !gold_per_dfs.is_null() );
+   FC_ASSERT( gold_per_dfs.base.amount > 0 && gold_per_dfs.quote.amount > 0 );
+
+   // GOLD/DFS is represented as GOLD base divided by DFS quote. The final
+   // division deliberately rounds down, so the resulting collateral ratio
+   // can never fall below the requested boundary.
+   fc::uint128_t debt = fc::uint128_t( dfs_collateral.value ) * gold_per_dfs.base.amount.value;
+   debt *= GRAPHENE_COLLATERAL_RATIO_DENOM;
+   debt /= gold_per_dfs.quote.amount.value;
+   debt /= collateral_ratio;
+   const fc::uint128_t max_supply( GRAPHENE_MAX_SHARE_SUPPLY );
+   return share_type( static_cast<uint64_t>( std::min( debt, max_supply ) ) );
+}
+
 void apply_feed_policy( const database& db, asset_bitasset_data_object& bitasset )
 {
    const asset_object& asset_obj = bitasset.asset_id( db );
@@ -249,18 +270,18 @@ void apply_feed_policy( const database& db, asset_bitasset_data_object& bitasset
    bitasset.refresh_cache();
 }
 
-void refresh_scheduled_feeds( database& db )
+bool refresh_scheduled_feeds( database& db )
 {
    const asset_object* gold_asset = find_gold_asset( db );
    if( !gold_asset )
-      return;
+      return false;
 
    const uint32_t head_block = db.head_block_num();
    if( head_block <= gold_asset->creation_block_num )
-      return;
+      return false;
 
    if( ( head_block - gold_asset->creation_block_num ) % DEFISHARES_GOLD_FEED_UPDATE_BLOCKS != 0 )
-      return;
+      return false;
 
    const auto& idx = db.get_index_type<asset_bitasset_data_index>().indices();
    auto itr = idx.begin();
@@ -278,6 +299,8 @@ void refresh_scheduled_feeds( database& db )
           && old_current_price != updated_bitasset.current_feed.settlement_price )
          db.check_call_orders( asset_obj, true, false, &updated_bitasset, true );
    }
+
+   return true;
 }
 
 } } } // graphene::chain::defishares

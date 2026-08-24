@@ -36,6 +36,7 @@
 #include <graphene/chain/credit_offer_object.hpp>
 #include <graphene/chain/fba_object.hpp>
 #include <graphene/chain/global_property_object.hpp>
+#include <graphene/chain/gold_reserve_vault_object.hpp>
 #include <graphene/chain/liquidity_pool_object.hpp>
 #include <graphene/chain/market_object.hpp>
 #include <graphene/chain/operation_history_object.hpp>
@@ -199,6 +200,7 @@ void database::initialize_indexes()
    add_index< primary_index<collateral_bid_index                          > >();
    add_index< primary_index< simple_index< fba_accumulator_object       > > >();
    add_index< primary_index<credit_deal_summary_index                     > >();
+   add_index< primary_index< simple_index<gold_reserve_vault_object       > > >();
 }
 
 } }

@@ -36,6 +36,7 @@
 #include <graphene/chain/balance_object.hpp>
 #include <graphene/chain/committee_member_object.hpp>
 #include <graphene/chain/fba_object.hpp>
+#include <graphene/chain/gold_reserve_vault_object.hpp>
 #include <graphene/chain/market_object.hpp>
 #include <graphene/chain/vesting_balance_object.hpp>
 #include <graphene/chain/witness_object.hpp>
@@ -673,6 +674,12 @@ void database_fixture_base::verify_asset_supplies( const database& db )
    }
 
    total_balances[asset_id_type()] += db.get_dynamic_global_properties().witness_budget;
+
+   if( const gold_reserve_vault_object* vault = db.find_gold_reserve_vault() )
+   {
+      total_balances[vault->debt_asset] += vault->gold_pool_balance;
+      total_debts[vault->debt_asset] += vault->gold_debt;
+   }
 
    for( const auto& item : total_debts )
    {

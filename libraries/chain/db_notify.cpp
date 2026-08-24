@@ -528,6 +528,8 @@ static void get_relevant_accounts( const object* obj, flat_set<account_id_type>&
               break;
              case impl_asset_bitasset_data_object_type:
               break;
+             case impl_gold_reserve_vault_object_type:
+              break;
              case impl_account_balance_object_type:{
               const auto* aobj = dynamic_cast<const account_balance_object*>(obj);
               accounts.insert( aobj->owner );

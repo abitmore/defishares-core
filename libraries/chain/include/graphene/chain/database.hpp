@@ -59,6 +59,7 @@ namespace graphene { namespace chain {
    class limit_order_object;
    class collateral_bid_object;
    class call_order_object;
+   class gold_reserve_vault_object;
 
    struct budget_record;
    enum class vesting_balance_type;
@@ -293,10 +294,24 @@ namespace graphene { namespace chain {
             account_id_type req_owner,
             bool require_vesting );
 
+         optional< vesting_balance_id_type > deposit_lazy_vesting(
+            const optional< vesting_balance_id_type >& ovbid,
+            const asset& amount,
+            uint32_t req_vesting_seconds,
+            vesting_balance_type balance_type,
+            account_id_type req_owner,
+            bool require_vesting );
+
          /// helper to handle cashback rewards
          void deposit_cashback(const account_object& acct, share_type amount, bool require_vesting = true);
          /// helper to handle witness pay
          void deposit_witness_pay(const witness_object& wit, share_type amount);
+         void deposit_gold_witness_pay(const witness_object& wit, const asset& amount);
+
+         const gold_reserve_vault_object* find_gold_reserve_vault()const;
+         void initialize_gold_reserve_vault();
+         void rebalance_gold_reserve_vault();
+         bool spend_gold_reserve( share_type amount );
 
          string to_pretty_string( const asset& a )const;
 
@@ -761,6 +776,7 @@ namespace graphene { namespace chain {
          void initialize_budget_record( fc::time_point_sec now, budget_record& rec )const;
          void process_budget();
          void pay_workers( share_type& budget );
+         void pay_workers_from_gold_reserve();
          void perform_chain_maintenance( const signed_block& next_block );
          void update_active_witnesses();
          void update_active_committee_members();

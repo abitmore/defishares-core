@@ -58,6 +58,7 @@ add_library( graphene_chain
              special_authority_evaluation.cpp
              custom_authority_evaluator.cpp
              defishares_feed.cpp
+             gold_reserve_vault.cpp
              buyback.cpp
 
              account_object.cpp

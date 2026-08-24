@@ -34,6 +34,7 @@
 #include <graphene/chain/credit_offer_object.hpp>
 #include <graphene/chain/fba_object.hpp>
 #include <graphene/chain/global_property_object.hpp>
+#include <graphene/chain/gold_reserve_vault_object.hpp>
 #include <graphene/chain/htlc_object.hpp>
 #include <graphene/chain/liquidity_pool_object.hpp>
 #include <graphene/chain/operation_history_object.hpp>
@@ -169,11 +170,34 @@ FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::witness_object, (graphene::db::
                     (last_aslot)
                     (signing_key)
                     (pay_vb)
+                    (gold_pay_vb)
                     (vote_id)
                     (total_votes)
                     (url)
                     (total_missed)
                     (last_confirmed_block_num)
+                  )
+
+FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::gold_reserve_vault_object, (graphene::db::object),
+                    (collateral_asset)
+                    (debt_asset)
+                    (dfs_locked_collateral)
+                    (gold_debt)
+                    (gold_pool_balance)
+                    (gold_committed_rewards)
+                    (gold_spent_today)
+                    (gold_daily_spending_limit)
+                    (target_collateral_ratio)
+                    (minimum_collateral_ratio)
+                    (daily_spending_divisor)
+                    (last_feed_epoch)
+                    (last_budget_day)
+                    (last_rebalance_price)
+                    (last_rebalance_time)
+                    (enabled)
+                    (issuance_paused)
+                    (emergency_mode)
+                    (version)
                   )
 
 FC_REFLECT_DERIVED_NO_TYPENAME(
@@ -192,6 +216,7 @@ FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::worker_object, (graphene::db::o
                     (work_end_date)
                     (daily_pay)
                     (worker)
+                    (gold_pay_vb)
                     (vote_for)
                     (vote_against)
                     (total_votes_for)
@@ -266,6 +291,7 @@ GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::special_authority_ob
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::transaction_history_object )
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::withdraw_permission_object )
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::witness_object )
+GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::gold_reserve_vault_object )
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::witness_schedule_object )
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::worker_object )
 GRAPHENE_IMPLEMENT_EXTERNAL_SERIALIZATION( graphene::chain::custom_authority_object )
