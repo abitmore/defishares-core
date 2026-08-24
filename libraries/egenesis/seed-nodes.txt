@@ -1,6 +1,1 @@
-"bts-seed1.abit-more.com:62015",     // abit           (Germany)
-"seed.roelandp.nl:1776",             // roelandp       (Canada)
-"seed1.xbts.io:1776",                // xbts.io        (Germany)
-"seed2.xbts.io:1776",                // xbts.io        (Germany)
-"seed4.xbts.io:1776",                // xbts.io        (Germany)
-"seeds.btsnodes.com:1776",           // Community
+"103.117.138.135:18190",             // DefiShares mainnet
