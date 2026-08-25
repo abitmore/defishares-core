@@ -131,7 +131,8 @@ namespace graphene { namespace protocol {
             /* 75 */ liquidity_pool_update_operation,
             /* 76 */ credit_deal_update_operation,
             /* 77 */ limit_order_update_operation,
-            /* 78 */ worker_create_gold_operation
+            /* 78 */ worker_create_gold_operation,
+            /* 79 */ worker_create_gold_refund_operation
          >;
 
    /**

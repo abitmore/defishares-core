@@ -218,6 +218,7 @@ FC_REFLECT_DERIVED_NO_TYPENAME( graphene::chain::worker_object, (graphene::db::o
                     (worker)
                     (gold_pay_vb)
                     (gold_daily_pay)
+                    (gold_refund_budget_ratio)
                     (vote_for)
                     (vote_against)
                     (total_votes_for)

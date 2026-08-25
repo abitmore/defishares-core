@@ -960,6 +960,19 @@ signed_transaction wallet_api::create_gold_worker(
       gold_daily_pay, name, url, worker_settings, broadcast );
 }
 
+signed_transaction wallet_api::create_gold_refund_worker(
+   const string& owner_account,
+   const time_point_sec& work_begin_date,
+   const time_point_sec& work_end_date,
+   uint16_t refund_budget_ratio,
+   const string& name,
+   const string& url,
+   bool broadcast /* = false */ )const
+{
+   return my->create_gold_refund_worker( owner_account, work_begin_date, work_end_date,
+      refund_budget_ratio, name, url, broadcast );
+}
+
 signed_transaction wallet_api::update_worker_votes(
    const string& owner_account,
    const worker_vote_delta& delta,

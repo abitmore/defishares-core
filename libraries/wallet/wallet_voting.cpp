@@ -311,6 +311,25 @@ namespace graphene { namespace wallet { namespace detail {
       return sign_transaction( tx, broadcast );
    }
 
+   signed_transaction wallet_api_impl::create_gold_refund_worker( string owner_account,
+         time_point_sec work_begin_date, time_point_sec work_end_date, uint16_t refund_budget_ratio,
+         string name, string url, bool broadcast)
+   {
+      worker_create_gold_refund_operation op;
+      op.owner = get_account( owner_account ).id;
+      op.work_begin_date = work_begin_date;
+      op.work_end_date = work_end_date;
+      op.refund_budget_ratio = refund_budget_ratio;
+      op.name = name;
+      op.url = url;
+
+      signed_transaction tx;
+      tx.operations.push_back( op );
+      set_operation_fees( tx, _remote_db->get_global_properties().parameters.get_current_fees() );
+      tx.validate();
+      return sign_transaction( tx, broadcast );
+   }
+
    signed_transaction wallet_api_impl::vote_for_committee_member(string voting_account,
          string committee_member, bool approve, bool broadcast )
    { try {

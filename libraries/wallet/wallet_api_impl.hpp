@@ -299,6 +299,10 @@ public:
          time_point_sec work_end_date, asset gold_daily_pay, string name, string url,
          variant worker_settings, bool broadcast );
 
+   signed_transaction create_gold_refund_worker( string owner_account, time_point_sec work_begin_date,
+         time_point_sec work_end_date, uint16_t refund_budget_ratio, string name, string url,
+         bool broadcast );
+
    signed_transaction update_worker_votes( string account, worker_vote_delta delta, bool broadcast );
 
    signed_transaction htlc_create( const string& source, const string& destination,

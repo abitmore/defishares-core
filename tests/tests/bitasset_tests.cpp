@@ -301,6 +301,175 @@ BOOST_AUTO_TEST_CASE( defishares_gold_reserve_pays_vesting_workers_from_internal
                       db.find_gold_reserve_vault()->gold_debt.value );
 } FC_LOG_AND_RETHROW() }
 
+BOOST_AUTO_TEST_CASE( defishares_gold_refund_worker_full_ratio_blocks_lower_votes )
+{ try {
+   const asset_id_type gold_id = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                                  GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS ).get_id();
+   const asset dfs_reserve( share_type( 100000000000000LL ), asset_id_type() );
+   const account_object& init0 = get_account( "init0" );
+   fund( init0, dfs_reserve );
+   reserve_asset( init0.get_id(), dfs_reserve );
+   generate_block();
+
+   worker_create_gold_refund_operation pre_hardfork_refund_op;
+   pre_hardfork_refund_op.owner = init0.get_id();
+   pre_hardfork_refund_op.work_begin_date = db.head_block_time();
+   pre_hardfork_refund_op.work_end_date = db.head_block_time() + fc::days( 1 );
+   pre_hardfork_refund_op.refund_budget_ratio = GRAPHENE_100_PERCENT;
+   trx.clear();
+   trx.operations.push_back( pre_hardfork_refund_op );
+   GRAPHENE_REQUIRE_THROW( PUSH_TX( db, trx, ~0 ), fc::exception );
+   trx.clear();
+
+   generate_blocks( HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_TIME );
+   set_expiration( db, trx );
+
+   ACTOR( refundowner );
+   ACTOR( workerowner );
+   upgrade_to_lifetime_member( refundowner_id );
+   upgrade_to_lifetime_member( workerowner_id );
+
+   worker_create_gold_operation legacy_refund_op;
+   legacy_refund_op.owner = refundowner_id;
+   legacy_refund_op.gold_daily_pay = asset( share_type( 1 ), gold_id );
+   legacy_refund_op.work_begin_date = db.head_block_time();
+   legacy_refund_op.work_end_date = db.head_block_time() + fc::days( 2 );
+   legacy_refund_op.initializer = refund_worker_initializer();
+   trx.clear();
+   trx.operations.push_back( legacy_refund_op );
+   GRAPHENE_REQUIRE_THROW( PUSH_TX( db, trx, ~0 ), fc::exception );
+   trx.clear();
+
+   worker_create_gold_refund_operation refund_op;
+   refund_op.owner = refundowner_id;
+   refund_op.work_begin_date = db.head_block_time();
+   refund_op.work_end_date = db.head_block_time() + fc::days( 2 );
+   refund_op.refund_budget_ratio = GRAPHENE_100_PERCENT;
+   refund_op.name = "full refund threshold";
+   trx.operations.push_back( refund_op );
+   const processed_transaction refund_result = PUSH_TX( db, trx, ~0 );
+   trx.clear();
+
+   worker_create_gold_operation vesting_op;
+   vesting_op.owner = workerowner_id;
+   vesting_op.gold_daily_pay = asset( share_type( GRAPHENE_MAX_SHARE_SUPPLY - 1 ), gold_id );
+   vesting_op.work_begin_date = db.head_block_time();
+   vesting_op.work_end_date = db.head_block_time() + fc::days( 2 );
+   vesting_op.initializer = vesting_balance_worker_initializer( 1 );
+   trx.operations.push_back( vesting_op );
+   const processed_transaction vesting_result = PUSH_TX( db, trx, ~0 );
+   trx.clear();
+
+   const worker_object& refund_worker = db.get<worker_object>(
+      refund_result.operation_results[0].get<object_id_type>() );
+   const worker_object& vesting_worker = db.get<worker_object>(
+      vesting_result.operation_results[0].get<object_id_type>() );
+   db.modify( refund_worker, []( worker_object& worker ) { worker.total_votes_for = 2; } );
+   db.modify( vesting_worker, []( worker_object& worker ) { worker.total_votes_for = 1; } );
+
+   const gold_reserve_vault_object& vault_before = *db.find_gold_reserve_vault();
+   const share_type pool_before = vault_before.gold_pool_balance;
+   const share_type spent_before = vault_before.gold_spent_today;
+   const share_type committed_before = vault_before.gold_committed_rewards;
+   const share_type debt_before = vault_before.gold_debt;
+   const share_type supply_before = gold_id( db ).dynamic_data( db ).current_supply;
+   db.modify( db.get_dynamic_global_properties(), [this]( dynamic_global_property_object& dpo )
+   {
+      dpo.last_budget_time = db.head_block_time() - fc::hours( 1 );
+   } );
+   db.pay_workers_from_gold_reserve();
+
+   const worker_object& paid_refund_worker = db.get<worker_object>( refund_worker.id );
+   const worker_object& blocked_vesting_worker = db.get<worker_object>( vesting_worker.id );
+   BOOST_REQUIRE( paid_refund_worker.gold_refund_budget_ratio.valid() );
+   BOOST_CHECK_EQUAL( *paid_refund_worker.gold_refund_budget_ratio, GRAPHENE_100_PERCENT );
+   BOOST_CHECK( !paid_refund_worker.gold_pay_vb.valid() );
+   BOOST_CHECK( !blocked_vesting_worker.gold_pay_vb.valid() );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_pool_balance.value, pool_before.value );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_spent_today.value, spent_before.value );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_committed_rewards.value, committed_before.value );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_debt.value, debt_before.value );
+   BOOST_CHECK_EQUAL( gold_id( db ).dynamic_data( db ).current_supply.value, supply_before.value );
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE( defishares_gold_refund_worker_partial_ratio_reserves_budget )
+{ try {
+   const asset_id_type gold_id = create_bitasset( "GOLD", GRAPHENE_WITNESS_ACCOUNT, 100, charge_market_fee,
+                                                  GRAPHENE_BLOCKCHAIN_PRECISION_DIGITS ).get_id();
+   const asset dfs_reserve( share_type( 100000000000000LL ), asset_id_type() );
+   const account_object& init0 = get_account( "init0" );
+   fund( init0, dfs_reserve );
+   reserve_asset( init0.get_id(), dfs_reserve );
+   generate_block();
+   generate_blocks( HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_TIME );
+   set_expiration( db, trx );
+
+   ACTOR( refundowner );
+   ACTOR( workerowner );
+   upgrade_to_lifetime_member( refundowner_id );
+   upgrade_to_lifetime_member( workerowner_id );
+
+   worker_create_gold_refund_operation invalid_ratio_op;
+   invalid_ratio_op.work_begin_date = db.head_block_time();
+   invalid_ratio_op.work_end_date = db.head_block_time() + fc::days( 1 );
+   invalid_ratio_op.refund_budget_ratio = 0;
+   GRAPHENE_REQUIRE_THROW( invalid_ratio_op.validate(), fc::exception );
+   invalid_ratio_op.refund_budget_ratio = GRAPHENE_100_PERCENT + 1;
+   GRAPHENE_REQUIRE_THROW( invalid_ratio_op.validate(), fc::exception );
+
+   worker_create_gold_refund_operation refund_op;
+   refund_op.owner = refundowner_id;
+   refund_op.work_begin_date = db.head_block_time();
+   refund_op.work_end_date = db.head_block_time() + fc::days( 2 );
+   refund_op.refund_budget_ratio = GRAPHENE_100_PERCENT / 2;
+   refund_op.name = "half refund threshold";
+   trx.clear();
+   trx.operations.push_back( refund_op );
+   const processed_transaction refund_result = PUSH_TX( db, trx, ~0 );
+   trx.clear();
+
+   worker_create_gold_operation vesting_op;
+   vesting_op.owner = workerowner_id;
+   vesting_op.gold_daily_pay = asset( share_type( GRAPHENE_MAX_SHARE_SUPPLY - 1 ), gold_id );
+   vesting_op.work_begin_date = db.head_block_time();
+   vesting_op.work_end_date = db.head_block_time() + fc::days( 2 );
+   vesting_op.initializer = vesting_balance_worker_initializer( 1 );
+   trx.operations.push_back( vesting_op );
+   const processed_transaction vesting_result = PUSH_TX( db, trx, ~0 );
+   trx.clear();
+
+   const worker_object& refund_worker = db.get<worker_object>(
+      refund_result.operation_results[0].get<object_id_type>() );
+   const worker_object& vesting_worker = db.get<worker_object>(
+      vesting_result.operation_results[0].get<object_id_type>() );
+   db.modify( refund_worker, []( worker_object& worker ) { worker.total_votes_for = 2; } );
+   db.modify( vesting_worker, []( worker_object& worker ) { worker.total_votes_for = 1; } );
+
+   const share_type worker_budget_before = db.available_gold_reserve_spending();
+   BOOST_REQUIRE_GT( worker_budget_before.value, 1 );
+   const share_type expected_payment = worker_budget_before / 2;
+   const share_type pool_before = db.find_gold_reserve_vault()->gold_pool_balance;
+   const share_type spent_before = db.find_gold_reserve_vault()->gold_spent_today;
+   const share_type committed_before = db.find_gold_reserve_vault()->gold_committed_rewards;
+   db.modify( db.get_dynamic_global_properties(), [this]( dynamic_global_property_object& dpo )
+   {
+      dpo.last_budget_time = db.head_block_time() - fc::hours( 1 );
+   } );
+   db.pay_workers_from_gold_reserve();
+
+   const worker_object& paid_refund_worker = db.get<worker_object>( refund_worker.id );
+   const worker_object& paid_vesting_worker = db.get<worker_object>( vesting_worker.id );
+   BOOST_REQUIRE( paid_vesting_worker.gold_pay_vb.valid() );
+   BOOST_CHECK( !paid_refund_worker.gold_pay_vb.valid() );
+   BOOST_CHECK_EQUAL( (*paid_vesting_worker.gold_pay_vb)( db ).balance.amount.value, expected_payment.value );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_pool_balance.value,
+                      ( pool_before - expected_payment ).value );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_spent_today.value,
+                      ( spent_before + expected_payment ).value );
+   BOOST_CHECK_EQUAL( db.find_gold_reserve_vault()->gold_committed_rewards.value,
+                      ( committed_before + expected_payment ).value );
+} FC_LOG_AND_RETHROW() }
+
 BOOST_AUTO_TEST_CASE( defishares_target_gold_feed_is_derived_to_core )
 { try {
    ACTORS( (feedproducer) );

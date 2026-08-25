@@ -70,6 +70,8 @@ struct hardfork_visitor {
    using credit_deal_update_op = fc::typelist::list< protocol::credit_deal_update_operation >;
    using defishares_gold_reserve_reward_ops = fc::typelist::list<
       protocol::worker_create_gold_operation >;
+   using defishares_gold_refund_threshold_ops = fc::typelist::list<
+      protocol::worker_create_gold_refund_operation >;
 
    fc::time_point_sec now;
 
@@ -108,6 +110,9 @@ struct hardfork_visitor {
    template<typename Op>
    std::enable_if_t<fc::typelist::contains<defishares_gold_reserve_reward_ops, Op>(), bool>
    visit() { return HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED(now); }
+   template<typename Op>
+   std::enable_if_t<fc::typelist::contains<defishares_gold_refund_threshold_ops, Op>(), bool>
+   visit() { return HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_PASSED(now); }
    /// @}
 
    /// typelist::runtime::dispatch adaptor

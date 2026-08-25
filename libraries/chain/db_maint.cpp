@@ -222,10 +222,23 @@ void database::pay_workers_from_gold_reserve()
    });
 
    const auto passed_time = head_time - get_dynamic_global_properties().last_budget_time;
+   share_type worker_budget_remaining = available_gold_reserve_spending();
    for( const worker_object& worker : active_workers )
    {
-      // Legacy workers remain readable and their DFS budget remains a
-      // historical field, but they are not eligible for GOLD reserve pay.
+      if( worker.worker.which() == 0 && worker.gold_refund_budget_ratio.valid() )
+      {
+         fc::uint128_t rejected = worker_budget_remaining.value;
+         rejected *= *worker.gold_refund_budget_ratio;
+         rejected /= GRAPHENE_100_PERCENT;
+         FC_ASSERT( rejected <= fc::uint128_t( worker_budget_remaining.value ) );
+         worker_budget_remaining -= share_type( static_cast<uint64_t>( rejected ) );
+         if( worker_budget_remaining <= 0 )
+            break;
+         continue;
+      }
+
+      // Legacy workers and pre-threshold GOLD refund workers remain readable,
+      // but are not eligible for GOLD reserve pay or threshold reservation.
       if( !worker.gold_daily_pay.valid() )
          continue;
 
@@ -234,7 +247,7 @@ void database::pay_workers_from_gold_reserve()
       requested /= fc::days( 1 ).count();
       if( requested == 0 || requested > fc::uint128_t( GRAPHENE_MAX_SHARE_SUPPLY ) )
          continue;
-      const share_type available = available_gold_reserve_spending();
+      const share_type available = std::min( worker_budget_remaining, available_gold_reserve_spending() );
       const share_type reward_amount = std::min(
          share_type( static_cast<uint64_t>( requested ) ), available );
       if( reward_amount <= 0 )
@@ -247,6 +260,7 @@ void database::pay_workers_from_gold_reserve()
          {
             if( !spend_gold_reserve( reward.amount ) )
                break;
+            worker_budget_remaining -= reward.amount;
 
             const vesting_balance_worker_type& worker_type = worker.worker.get<vesting_balance_worker_type>();
             if( worker.gold_pay_vb.valid() )
@@ -280,12 +294,11 @@ void database::pay_workers_from_gold_reserve()
          case 2: // burn_worker_type
             if( spend_gold_reserve( reward.amount ) )
             {
+               worker_budget_remaining -= reward.amount;
                adjust_balance( GRAPHENE_NULL_ACCOUNT, reward );
             }
             break;
-         default: // refund_worker_type consumes its budget and returns no GOLD.
-            // This mirrors refund_worker_type::pay_worker(): the worker still
-            // claims its scheduled budget, but no spend leaves the treasury.
+         default:
             break;
       }
    }
