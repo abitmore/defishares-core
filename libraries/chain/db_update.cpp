@@ -82,23 +82,42 @@ void database::update_global_dynamic_data( const signed_block& b, const uint32_t
    _undo_db.set_max_size( _dgp.head_block_number - _dgp.last_irreversible_block_num + 1 );
    _fork_db.set_max_size( _dgp.head_block_number - _dgp.last_irreversible_block_num + 1 );
 
-   defishares::refresh_scheduled_feeds( *this );
+   const bool gold_feed_updated = defishares::refresh_scheduled_feeds( *this );
+   if( HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED( head_block_time() ) )
+   {
+      initialize_gold_reserve_vault();
+      if( gold_feed_updated )
+         rebalance_gold_reserve_vault();
+   }
 }
 
 void database::update_signing_witness(const witness_object& signing_witness, const signed_block& new_block)
 {
-   const global_property_object& gpo = get_global_properties();
    const dynamic_global_property_object& dpo = get_dynamic_global_properties();
    uint64_t new_block_aslot = dpo.current_aslot + get_slot_at_time( new_block.timestamp );
 
-   share_type witness_pay = std::min( gpo.parameters.witness_pay_per_block, dpo.witness_budget );
-
-   modify( dpo, [&]( dynamic_global_property_object& _dpo )
+   if( HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED( head_block_time() ) )
    {
-      _dpo.witness_budget -= witness_pay;
-   } );
+      const asset_object* gold = defishares::find_gold_asset( *this );
+      if( gold && gold->precision >= 5 )
+      {
+         const share_type gold_witness_pay = asset::scaled_precision( gold->precision ).value / 100000;
+         if( spend_gold_reserve( gold_witness_pay ) )
+            deposit_gold_witness_pay( signing_witness, asset( gold_witness_pay, gold->get_id() ) );
+      }
+   }
+   else
+   {
+      const global_property_object& gpo = get_global_properties();
+      const share_type witness_pay = std::min( gpo.parameters.witness_pay_per_block, dpo.witness_budget );
 
-   deposit_witness_pay( signing_witness, witness_pay );
+      modify( dpo, [&]( dynamic_global_property_object& mutable_dpo )
+      {
+         mutable_dpo.witness_budget -= witness_pay;
+      } );
+
+      deposit_witness_pay( signing_witness, witness_pay );
+   }
 
    modify( signing_witness, [&]( witness_object& _wit )
    {

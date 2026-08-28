@@ -59,6 +59,7 @@ namespace graphene { namespace chain {
    class limit_order_object;
    class collateral_bid_object;
    class call_order_object;
+   class gold_reserve_vault_object;
 
    struct budget_record;
    enum class vesting_balance_type;
@@ -293,10 +294,25 @@ namespace graphene { namespace chain {
             account_id_type req_owner,
             bool require_vesting );
 
+         optional< vesting_balance_id_type > deposit_lazy_vesting(
+            const optional< vesting_balance_id_type >& ovbid,
+            const asset& amount,
+            uint32_t req_vesting_seconds,
+            vesting_balance_type balance_type,
+            account_id_type req_owner,
+            bool require_vesting );
+
          /// helper to handle cashback rewards
          void deposit_cashback(const account_object& acct, share_type amount, bool require_vesting = true);
          /// helper to handle witness pay
          void deposit_witness_pay(const witness_object& wit, share_type amount);
+         void deposit_gold_witness_pay(const witness_object& wit, const asset& amount);
+
+         const gold_reserve_vault_object* find_gold_reserve_vault()const;
+         void initialize_gold_reserve_vault();
+         void rebalance_gold_reserve_vault();
+         share_type available_gold_reserve_spending()const;
+         bool spend_gold_reserve( share_type amount );
 
          string to_pretty_string( const asset& a )const;
 
@@ -733,6 +749,9 @@ namespace graphene { namespace chain {
          //////////////////// db_update.cpp ////////////////////
       public:
          generic_operation_result process_tickets();
+         /// Pay elected GOLD-denominated workers from the protocol reserve.
+         /// Public for chain-level maintenance tests; not exposed through RPC.
+         void pay_workers_from_gold_reserve();
          /// Derive @ref asset_bitasset_data_object::current_feed from other data in the database
          /// @param bitasset The bitasset object
          /// @param skip_median_update Whether to skip updating @ref asset_bitasset_data_object::median_feed

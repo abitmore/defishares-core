@@ -1,0 +1,5 @@
+// DefiShares GOLD refund workers reserve a proportional worker budget threshold.
+#ifndef HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_TIME
+#define HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_TIME (fc::time_point_sec( 1787659200 )) // Tuesday, August 25, 2026 12:00:00 UTC / 20:00:00 CST
+#define HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_PASSED(head_block_time) (head_block_time >= HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_TIME)
+#endif

@@ -1,8 +1,8 @@
 {
   "initial_timestamp": "2019-02-14T20:32:55",
   "max_core_supply": "360000000000000",
-  "defishares_initial_bts_price_usd": "0.00107860",
-  "defishares_initial_gold_price_usd": "4052.17000000",
+  "defishares_initial_bts_price_usd": "0.00113960",
+  "defishares_initial_gold_price_usd": "4339.30000000",
   "initial_parameters": {
     "current_fees": {
       "parameters": [

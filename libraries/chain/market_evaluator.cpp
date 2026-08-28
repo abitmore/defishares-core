@@ -518,6 +518,12 @@ void_result call_order_update_evaluator::do_evaluate(const call_order_update_ope
 
    FC_ASSERT( o.delta_debt.amount <= 0 || _debt_asset->can_create_new_supply(), "Can not create new supply" );
 
+   if( o.delta_debt.amount > 0 && defishares::is_gold_asset( *_debt_asset )
+       && HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED( d.head_block_time() ) )
+   {
+      FC_ASSERT( false, "GOLD supply can only be created by the protocol reserve vault" );
+   }
+
    _dynamic_data_obj = &_debt_asset->dynamic_asset_data_id(d);
 
    /***

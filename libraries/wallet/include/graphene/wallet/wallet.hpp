@@ -1464,6 +1464,29 @@ class wallet_api
          bool broadcast = false
          )const;
 
+      /** Create a worker whose daily budget is directly denominated in GOLD. */
+      signed_transaction create_gold_worker(
+         const string& owner_account,
+         const time_point_sec& work_begin_date,
+         const time_point_sec& work_end_date,
+         const asset& gold_daily_pay,
+         const string& name,
+         const string& url,
+         const variant& worker_settings,
+         bool broadcast = false
+         )const;
+
+      /** Create a GOLD refund worker that reserves a percentage of the daily worker budget. */
+      signed_transaction create_gold_refund_worker(
+         const string& owner_account,
+         const time_point_sec& work_begin_date,
+         const time_point_sec& work_end_date,
+         uint16_t refund_budget_ratio,
+         const string& name,
+         const string& url,
+         bool broadcast = false
+         )const;
+
       /**
        * Update your votes for workers
        *
@@ -1898,6 +1921,8 @@ FC_API( graphene::wallet::wallet_api,
         (create_witness)
         (update_witness)
         (create_worker)
+        (create_gold_worker)
+        (create_gold_refund_worker)
         (update_worker_votes)
         (htlc_create)
         (htlc_redeem)

@@ -27,6 +27,9 @@
 #include <graphene/chain/account_object.hpp>
 #include <graphene/chain/vesting_balance_object.hpp>
 #include <graphene/chain/worker_object.hpp>
+#include <graphene/chain/asset_object.hpp>
+#include <graphene/chain/defishares_feed.hpp>
+#include <graphene/chain/hardfork.hpp>
 
 #include <graphene/protocol/vote.hpp>
 
@@ -111,6 +114,81 @@ void refund_worker_type::pay_worker(share_type pay, database& db)
       d.current_supply -= pay;
    });
 }
+
+void_result worker_create_gold_evaluator::do_evaluate(const worker_create_gold_evaluator::operation_type& o)
+{ try {
+   database& d = db();
+   FC_ASSERT( HARDFORK_DEFISHARES_GOLD_RESERVE_REWARD_PASSED( d.head_block_time() ),
+              "GOLD workers are not active before the GOLD reserve hardfork" );
+   FC_ASSERT(d.get(o.owner).is_lifetime_member());
+   FC_ASSERT(o.work_begin_date >= d.head_block_time());
+   const asset_object* gold = defishares::find_gold_asset( d );
+   FC_ASSERT(gold != nullptr, "GOLD asset is not initialized");
+   FC_ASSERT(o.gold_daily_pay.asset_id == gold->get_id(), "Worker budget must be denominated in GOLD");
+   FC_ASSERT( !HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_PASSED( d.head_block_time() )
+              || o.initializer.which() != 0,
+              "Create GOLD refund workers with worker_create_gold_refund_operation after the refund-threshold hardfork" );
+   return void_result();
+} FC_CAPTURE_AND_RETHROW( (o) ) }
+
+object_id_type worker_create_gold_evaluator::do_apply(const worker_create_gold_evaluator::operation_type& o)
+{ try {
+   database& d = db();
+   vote_id_type for_id, against_id;
+   d.modify(d.get_global_properties(), [&for_id, &against_id](global_property_object& p) {
+      for_id = vote_id_type(vote_id_type::worker, p.next_available_vote_id++);
+      against_id = vote_id_type(vote_id_type::worker, p.next_available_vote_id++);
+   });
+
+   return d.create<worker_object>([&](worker_object& w) {
+      w.worker_account = o.owner;
+      w.daily_pay = 0;
+      w.gold_daily_pay = o.gold_daily_pay.amount;
+      w.work_begin_date = o.work_begin_date;
+      w.work_end_date = o.work_end_date;
+      w.name = o.name;
+      w.url = o.url;
+      w.vote_for = for_id;
+      w.vote_against = against_id;
+
+      w.worker.set_which(o.initializer.which());
+      o.initializer.visit( worker_init_visitor( w, d ) );
+   }).id;
+} FC_CAPTURE_AND_RETHROW( (o) ) }
+
+void_result worker_create_gold_refund_evaluator::do_evaluate(const worker_create_gold_refund_evaluator::operation_type& o)
+{ try {
+   database& d = db();
+   FC_ASSERT( HARDFORK_DEFISHARES_GOLD_REFUND_THRESHOLD_PASSED( d.head_block_time() ),
+              "GOLD refund threshold workers are not active before the hardfork" );
+   FC_ASSERT( d.get(o.owner).is_lifetime_member() );
+   FC_ASSERT( o.work_begin_date >= d.head_block_time() );
+   FC_ASSERT( defishares::find_gold_asset( d ) != nullptr, "GOLD asset is not initialized" );
+   return void_result();
+} FC_CAPTURE_AND_RETHROW( (o) ) }
+
+object_id_type worker_create_gold_refund_evaluator::do_apply(const worker_create_gold_refund_evaluator::operation_type& o)
+{ try {
+   database& d = db();
+   vote_id_type for_id, against_id;
+   d.modify(d.get_global_properties(), [&for_id, &against_id](global_property_object& p) {
+      for_id = vote_id_type(vote_id_type::worker, p.next_available_vote_id++);
+      against_id = vote_id_type(vote_id_type::worker, p.next_available_vote_id++);
+   });
+
+   return d.create<worker_object>([&](worker_object& w) {
+      w.worker_account = o.owner;
+      w.daily_pay = 0;
+      w.gold_refund_budget_ratio = o.refund_budget_ratio;
+      w.work_begin_date = o.work_begin_date;
+      w.work_end_date = o.work_end_date;
+      w.name = o.name;
+      w.url = o.url;
+      w.vote_for = for_id;
+      w.vote_against = against_id;
+      w.worker.set_which( 0 );
+   }).id;
+} FC_CAPTURE_AND_RETHROW( (o) ) }
 
 void vesting_balance_worker_type::pay_worker(share_type pay, database& db)
 {

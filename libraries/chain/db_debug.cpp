@@ -26,6 +26,7 @@
 
 #include <graphene/chain/account_object.hpp>
 #include <graphene/chain/asset_object.hpp>
+#include <graphene/chain/gold_reserve_vault_object.hpp>
 #include <graphene/chain/htlc_object.hpp>
 #include <graphene/chain/market_object.hpp>
 #include <graphene/chain/vesting_balance_object.hpp>
@@ -94,6 +95,13 @@ void database::debug_dump()
       total_balances[asset_id_type()] += asset_obj.dynamic_asset_data_id(db).fee_pool;
 //      edump((total_balances[asset_obj.id])(asset_obj.dynamic_asset_data_id(db).current_supply ) );
    }
+
+   if( const gold_reserve_vault_object* vault = db.find_gold_reserve_vault() )
+   {
+      total_balances[vault->debt_asset] += vault->gold_pool_balance;
+      total_debts[vault->debt_asset] += vault->gold_debt;
+   }
+
    for( const auto& htlc : htlcs )
       total_balances[htlc.transfer.asset_id] += htlc.transfer.amount;
 

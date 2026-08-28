@@ -177,7 +177,7 @@ if (NOT MSVC)
 endif(NOT MSVC)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
-set( GRAPHENE_EGENESIS_JSON "${CMAKE_CURRENT_SOURCE_DIR}/libraries/egenesis/genesis-defishares.json"
+set( GRAPHENE_EGENESIS_JSON "${CMAKE_CURRENT_SOURCE_DIR}/libraries/egenesis/genesis-mainnet.json"
      CACHE STRING "Path to embedded genesis file" )
 
 if (USE_PCH)
