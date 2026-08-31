@@ -1,0 +1,7 @@
+// DefiShares allows ordinary users to borrow GOLD against DFS.
+// 2030-01-01 is an intentionally unscheduled placeholder; replace it only
+// when governance has approved the mainnet activation time.
+#ifndef HARDFORK_DEFISHARES_GOLD_USER_BORROW_TIME
+#define HARDFORK_DEFISHARES_GOLD_USER_BORROW_TIME (fc::time_point_sec( 1893456000 )) // Tuesday, January 1, 2030 00:00:00 UTC
+#define HARDFORK_DEFISHARES_GOLD_USER_BORROW_PASSED(head_block_time) (head_block_time >= HARDFORK_DEFISHARES_GOLD_USER_BORROW_TIME)
+#endif
